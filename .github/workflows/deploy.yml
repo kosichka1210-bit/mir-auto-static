@@ -20,6 +20,8 @@ jobs:
       - name: Unpack site
         run: unzip -q timeweb-site.zip -d site
       - uses: actions/configure-pages@v5
+        with:
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: site
