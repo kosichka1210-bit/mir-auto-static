@@ -17,6 +17,8 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+      - name: Check Telegram bot PHP syntax
+        run: find telegram-bot -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Unpack site
         run: unzip -q timeweb-site.zip -d site
       - uses: actions/configure-pages@v5
