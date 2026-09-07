@@ -1,0 +1,5 @@
+private/config/config.php
+private/storage/
+public/media/cars/*
+!public/media/cars/.gitkeep
+

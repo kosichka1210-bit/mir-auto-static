@@ -1,0 +1,44 @@
+CREATE TABLE IF NOT EXISTS bot_sessions (
+    user_id BIGINT UNSIGNED NOT NULL PRIMARY KEY,
+    chat_id BIGINT NOT NULL,
+    step VARCHAR(40) NOT NULL,
+    draft_json JSON NOT NULL,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS cars (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    slug VARCHAR(190) NOT NULL UNIQUE,
+    brand VARCHAR(100) NOT NULL,
+    model VARCHAR(160) NOT NULL,
+    year SMALLINT UNSIGNED NOT NULL,
+    mileage_km INT UNSIGNED NULL,
+    engine VARCHAR(100) NULL,
+    transmission VARCHAR(100) NULL,
+    drivetrain VARCHAR(100) NULL,
+    trim_name VARCHAR(160) NULL,
+    price_rub INT UNSIGNED NULL,
+    price_location VARCHAR(100) NULL,
+    status VARCHAR(30) NOT NULL,
+    description TEXT NULL,
+    notes TEXT NULL,
+    created_by BIGINT UNSIGNED NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    published_at TIMESTAMP NULL DEFAULT NULL,
+    INDEX idx_cars_published (published_at),
+    INDEX idx_cars_status (status),
+    INDEX idx_cars_brand_year (brand, year)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS car_images (
+    id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT PRIMARY KEY,
+    car_id BIGINT UNSIGNED NOT NULL,
+    path VARCHAR(255) NOT NULL,
+    sort_order SMALLINT UNSIGNED NOT NULL DEFAULT 0,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    CONSTRAINT fk_car_images_car
+        FOREIGN KEY (car_id) REFERENCES cars(id) ON DELETE CASCADE,
+    INDEX idx_car_images_order (car_id, sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
