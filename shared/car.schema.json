@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "MIR AUTO vehicle",
+  "type": "object",
+  "required": ["id", "slug", "status", "brand", "model", "title", "images"],
+  "properties": {
+    "id": { "type": "string", "minLength": 1 },
+    "slug": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "status": { "type": "string", "enum": ["В наличии", "Под заказ", "Продано"] },
+    "brand": { "type": "string" },
+    "model": { "type": "string" },
+    "title": { "type": "string" },
+    "price": { "type": "string" },
+    "priceNote": { "type": "string" },
+    "year": { "type": "string" },
+    "mileage": { "type": "string" },
+    "engine": { "type": "string" },
+    "power": { "type": "string" },
+    "drive": { "type": "string" },
+    "transmission": { "type": "string" },
+    "equipment": { "type": "string" },
+    "city": { "type": "string" },
+    "description": { "type": "string" },
+    "features": { "type": "array", "items": { "type": "string" } },
+    "images": { "type": "array", "minItems": 1, "items": { "type": "string" } },
+    "source": { "type": "string" },
+    "publishedAt": { "type": "string" },
+    "updatedAt": { "type": "string" }
+  },
+  "additionalProperties": false
+}
