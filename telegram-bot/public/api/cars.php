@@ -27,9 +27,9 @@ try {
     $slug = trim((string) ($_GET['slug'] ?? ''));
     $limit = max(1, min(100, (int) ($_GET['limit'] ?? 50)));
 
-    $sql = 'SELECT id, slug, brand, model, year, mileage_km, engine, transmission,
-                   drivetrain, trim_name, price_rub, price_location, status,
-                   description, notes, published_at
+    $sql = 'SELECT id, slug, brand, model, title, year, mileage_km, engine, power, transmission,
+                   drivetrain AS drive, trim_name AS equipment, price_rub, price_location, city, status,
+                   description, notes, features, source, published_at, updated_at
             FROM cars
             WHERE published_at IS NOT NULL';
     $parameters = [];
@@ -59,6 +59,8 @@ try {
         $car['mileage_km'] = $car['mileage_km'] !== null ? (int) $car['mileage_km'] : null;
         $car['price_rub'] = $car['price_rub'] !== null ? (int) $car['price_rub'] : null;
         $car['id'] = (int) $car['id'];
+        $car['features'] = $car['features'] ? json_decode((string) $car['features'], true) : [];
+        $car['title'] = $car['title'] ?: trim($car['brand'] . ' ' . $car['model']);
     }
     unset($car);
 

@@ -76,29 +76,34 @@ final class Database
 
             $statement = $this->pdo->prepare(
                 'INSERT INTO cars
-                    (slug, brand, model, year, mileage_km, engine, transmission, drivetrain,
-                     trim_name, price_rub, price_location, status, description, notes,
+                    (slug, brand, model, title, year, mileage_km, engine, power, transmission, drivetrain,
+                     trim_name, price_rub, price_location, city, status, description, notes, features, source,
                      created_by, published_at)
                  VALUES
-                    (:slug, :brand, :model, :year, :mileage_km, :engine, :transmission,
-                     :drivetrain, :trim_name, :price_rub, :price_location, :status,
-                     :description, :notes, :created_by, CURRENT_TIMESTAMP)'
+                    (:slug, :brand, :model, :title, :year, :mileage_km, :engine, :power, :transmission,
+                     :drivetrain, :trim_name, :price_rub, :price_location, :city, :status,
+                     :description, :notes, :features, :source, :created_by, CURRENT_TIMESTAMP)'
             );
             $statement->execute([
                 'slug' => $slug,
                 'brand' => $draft['brand'],
                 'model' => $draft['model'],
+                'title' => $draft['title'] ?? trim((string) $draft['brand'] . ' ' . (string) $draft['model']),
                 'year' => $draft['year'],
                 'mileage_km' => $draft['mileage_km'] ?? null,
                 'engine' => $draft['engine'] ?? null,
+                'power' => $draft['power'] ?? null,
                 'transmission' => $draft['transmission'] ?? null,
                 'drivetrain' => $draft['drivetrain'] ?? null,
                 'trim_name' => $draft['trim_name'] ?? null,
                 'price_rub' => $draft['price_rub'] ?? null,
                 'price_location' => $draft['price_location'] ?? null,
+                'city' => $draft['city'] ?? null,
                 'status' => $draft['status'],
                 'description' => $draft['description'] ?? null,
                 'notes' => $draft['notes'] ?? null,
+                'features' => isset($draft['features']) ? json_encode(array_values((array) $draft['features']), JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR) : null,
+                'source' => $draft['source'] ?? 'Telegram MIR AUTO',
                 'created_by' => $createdBy,
             ]);
 
