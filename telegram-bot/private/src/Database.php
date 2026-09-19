@@ -65,6 +65,52 @@ final class Database
         $statement->execute(['user_id' => $userId]);
     }
 
+    public function findCar(int $id): ?array
+    {
+        $statement = $this->pdo->prepare(
+            'SELECT id, slug, brand, model, title, year, status FROM cars WHERE id = :id LIMIT 1'
+        );
+        $statement->execute(['id' => $id]);
+        $row = $statement->fetch();
+        return $row ?: null;
+    }
+
+    public function updateCarField(int $id, string $field, mixed $value): bool
+    {
+        $allowed = [
+            'brand', 'model', 'title', 'year', 'mileage_km', 'engine', 'power',
+            'transmission', 'drivetrain', 'trim_name', 'price_rub', 'price_location',
+            'city', 'status', 'description', 'notes', 'source',
+        ];
+        if (!in_array($field, $allowed, true)) {
+            throw new InvalidArgumentException('Поле нельзя изменять через Telegram.');
+        }
+
+        $statement = $this->pdo->prepare("UPDATE cars SET {$field} = :value WHERE id = :id");
+        $statement->execute(['value' => $value, 'id' => $id]);
+        return $statement->rowCount() > 0;
+    }
+
+    public function deleteCar(int $id, string $mediaDir): ?array
+    {
+        $car = $this->findCar($id);
+        if ($car === null) {
+            return null;
+        }
+        $statement = $this->pdo->prepare('DELETE FROM cars WHERE id = :id');
+        $statement->execute(['id' => $id]);
+        $directory = rtrim($mediaDir, '/\\') . DIRECTORY_SEPARATOR . (string) $car['slug'];
+        if (is_dir($directory)) {
+            foreach (glob($directory . DIRECTORY_SEPARATOR . '*') ?: [] as $file) {
+                if (is_file($file)) {
+                    @unlink($file);
+                }
+            }
+            @rmdir($directory);
+        }
+        return $car;
+    }
+
     public function publishCar(array $draft, int $createdBy, string $mediaDir): array
     {
         $this->pdo->beginTransaction();

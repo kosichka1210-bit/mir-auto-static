@@ -58,7 +58,9 @@ final class Bot
 
         $text = trim((string) ($message['text'] ?? $message['caption'] ?? ''));
 
-        if ($text === '/start' || $text === '/help') {
+        $command = strtolower((string) strtok($text, " \n"));
+
+        if ($command === '/start' || $command === '/help') {
             $this->showHome($chatId, $userId);
             return;
         }
@@ -75,8 +77,23 @@ final class Bot
             return;
         }
 
-        if ($text === '/cars' || $text === 'Последние автомобили') {
+        if ($command === '/cars' || $text === 'Последние автомобили') {
             $this->showRecentCars($chatId);
+            return;
+        }
+
+        if ($command === '/sold') {
+            $this->handleSoldCommand($chatId, $text);
+            return;
+        }
+
+        if ($command === '/edit') {
+            $this->handleEditCommand($chatId, $text);
+            return;
+        }
+
+        if ($command === '/delete') {
+            $this->handleDeleteCommand($chatId, $userId, $text);
             return;
         }
 
@@ -108,9 +125,88 @@ final class Bot
     {
         $this->telegram->sendMessage(
             $chatId,
-            "<b>MIR AUTO — каталог</b>\n\nБот поможет добавить автомобиль пошагово. Сначала данные, затем фотографии и предварительный просмотр.\n\nВаш Telegram ID: <code>{$userId}</code>",
+            "<b>MIR AUTO — каталог</b>\n\n"
+            . "/addcar — добавить автомобиль\n"
+            . "/cars — последние автомобили\n"
+            . "/edit ID поле значение — изменить карточку\n"
+            . "/sold ID — отметить проданной\n"
+            . "/delete ID — удалить после подтверждения\n"
+            . "/cancel — отменить текущий черновик\n\n"
+            . "После /addcar можно ответить одним сообщением:\n<code>Марка: Hyundai\nМодель: Elantra\nГод: 2023\nПробег: 12800\nЦена: 1515000\nСтатус: Под заказ\nОписание: ...</code>\n\n"
+            . "Поля /edit: brand, model, title, year, mileage, engine, power, transmission, drive, equipment, price, city, status, description.\n\n"
+            . "Ваш Telegram ID: <code>{$userId}</code>",
             $this->homeKeyboard()
         );
+    }
+
+    private function handleSoldCommand(int $chatId, string $text): void
+    {
+        if (!preg_match('/^\/sold\s+(\d+)$/i', $text, $matches)) {
+            $this->telegram->sendMessage($chatId, 'Формат: <code>/sold ID</code>. Например: <code>/sold 17</code>.');
+            return;
+        }
+        $id = (int) $matches[1];
+        if ($this->database->findCar($id) === null) {
+            $this->telegram->sendMessage($chatId, "Автомобиль #{$id} не найден.");
+            return;
+        }
+        $this->database->updateCarField($id, 'status', 'Продано');
+        $this->telegram->sendMessage($chatId, "Автомобиль #{$id} отмечен как «Продано».", $this->homeKeyboard());
+    }
+
+    private function handleEditCommand(int $chatId, string $text): void
+    {
+        if (!preg_match('/^\/edit\s+(\d+)\s+([a-z_]+)\s+(.+)$/isu', $text, $matches)) {
+            $this->telegram->sendMessage($chatId, 'Формат: <code>/edit ID поле значение</code>. Пример: <code>/edit 17 price 1890000</code>.');
+            return;
+        }
+        $id = (int) $matches[1];
+        $aliases = ['mileage' => 'mileage_km', 'drive' => 'drivetrain', 'equipment' => 'trim_name', 'price' => 'price_rub'];
+        $field = $aliases[strtolower($matches[2])] ?? strtolower($matches[2]);
+        $value = trim($matches[3]);
+        if ($this->database->findCar($id) === null) {
+            $this->telegram->sendMessage($chatId, "Автомобиль #{$id} не найден.");
+            return;
+        }
+        if (in_array($field, ['year', 'mileage_km', 'price_rub'], true)) {
+            $value = (int) preg_replace('/\D+/', '', $value);
+            if ($value <= 0) {
+                $this->telegram->sendMessage($chatId, 'Для этого поля нужно положительное число.');
+                return;
+            }
+        }
+        if ($field === 'status' && !in_array($value, ['В наличии', 'Под заказ', 'Продано'], true)) {
+            $this->telegram->sendMessage($chatId, 'Статус: «В наличии», «Под заказ» или «Продано».');
+            return;
+        }
+        try {
+            $this->database->updateCarField($id, $field, $value);
+            $this->telegram->sendMessage($chatId, "Карточка #{$id} обновлена.", $this->homeKeyboard());
+        } catch (InvalidArgumentException $exception) {
+            $this->telegram->sendMessage($chatId, $exception->getMessage());
+        }
+    }
+
+    private function handleDeleteCommand(int $chatId, int $userId, string $text): void
+    {
+        if (!preg_match('/^\/delete\s+(\d+)$/i', $text, $matches)) {
+            $this->telegram->sendMessage($chatId, 'Формат: <code>/delete ID</code>. Удаление потребует подтверждения.');
+            return;
+        }
+        $id = (int) $matches[1];
+        $car = $this->database->findCar($id);
+        if ($car === null) {
+            $this->telegram->sendMessage($chatId, "Автомобиль #{$id} не найден.");
+            return;
+        }
+        $this->database->saveSession($userId, $chatId, 'delete_confirm', ['car_id' => $id]);
+        $name = $this->escape(trim((string) $car['brand'] . ' ' . (string) $car['model']));
+        $this->telegram->sendMessage($chatId, "Удалить #{$id} — <b>{$name}</b>? Карточка исчезнет из API.", [
+            'inline_keyboard' => [[
+                ['text' => 'Удалить', 'callback_data' => 'delete_car:' . $id],
+                ['text' => 'Отмена', 'callback_data' => 'cancel_delete'],
+            ]],
+        ]);
     }
 
     private function handleField(array $session, int $userId, int $chatId, string $text): void
@@ -119,6 +215,21 @@ final class Bot
         if (!isset($this->steps[$step])) {
             $this->database->deleteSession($userId);
             $this->telegram->sendMessage($chatId, 'Черновик был повреждён и сброшен. Начните заново.', $this->homeKeyboard());
+            return;
+        }
+
+        if ($step === 'brand' && str_contains($text, ':') && str_contains($text, "\n")) {
+            $structured = $this->parseStructuredCar($text);
+            if ($structured !== null) {
+                $this->database->saveSession($userId, $chatId, 'photos', $structured);
+                $this->telegram->sendMessage(
+                    $chatId,
+                    '<b>Данные приняты.</b> Теперь отправьте от 1 до 10 фотографий одной группой или по одной. После загрузки нажмите «Готово».',
+                    ['keyboard' => [[['text' => 'Готово']], [['text' => 'Отменить']]], 'resize_keyboard' => true]
+                );
+                return;
+            }
+            $this->telegram->sendMessage($chatId, 'В структурированном тексте обязательны поля «Марка», «Модель» и «Год». Проверьте шаблон в /help.');
             return;
         }
 
@@ -153,6 +264,42 @@ final class Bot
         } else {
             $this->askStep($chatId, $nextStep);
         }
+    }
+
+    private function parseStructuredCar(string $text): ?array
+    {
+        $aliases = [
+            'марка' => 'brand', 'модель' => 'model', 'название' => 'title', 'год' => 'year',
+            'пробег' => 'mileage_km', 'двигатель' => 'engine', 'мощность' => 'power',
+            'коробка' => 'transmission', 'кпп' => 'transmission', 'привод' => 'drivetrain',
+            'комплектация' => 'trim_name', 'цена' => 'price_rub', 'город' => 'city',
+            'статус' => 'status', 'описание' => 'description', 'особенности' => 'notes',
+        ];
+        $draft = ['images' => [], 'status' => 'В наличии', 'source' => 'Telegram MIR AUTO'];
+        foreach (preg_split('/\R/u', $text) ?: [] as $line) {
+            if (!preg_match('/^\s*([^:]{2,40})\s*:\s*(.+?)\s*$/u', $line, $match)) {
+                continue;
+            }
+            $label = mb_strtolower(trim($match[1]));
+            $field = $aliases[$label] ?? null;
+            if ($field === null) {
+                continue;
+            }
+            $value = trim($match[2]);
+            if (in_array($field, ['year', 'mileage_km', 'price_rub'], true)) {
+                $value = (int) preg_replace('/\D+/', '', $value);
+            }
+            $draft[$field] = $value;
+        }
+        if (empty($draft['brand']) || empty($draft['model']) || empty($draft['year'])) {
+            return null;
+        }
+        if (!in_array($draft['status'], ['В наличии', 'Под заказ', 'Продано'], true)) {
+            $draft['status'] = 'В наличии';
+        }
+        $draft['title'] = $draft['title'] ?? trim((string) $draft['brand'] . ' ' . (string) $draft['model']);
+        $draft['price_location'] = $draft['city'] ?? null;
+        return $draft;
     }
 
     private function handleStatus(array $session, int $userId, int $chatId, string $text): void
@@ -236,6 +383,27 @@ final class Bot
         }
 
         $session = $this->database->getSession($userId);
+        if (($session['step'] ?? '') === 'delete_confirm') {
+            if ($action === 'cancel_delete') {
+                $this->database->deleteSession($userId);
+                $this->telegram->answerCallbackQuery($callbackId, 'Отменено.');
+                $this->telegram->sendMessage($chatId, 'Удаление отменено.', $this->homeKeyboard());
+                return;
+            }
+            if (preg_match('/^delete_car:(\d+)$/', $action, $matches)
+                && (int) ($session['draft']['car_id'] ?? 0) === (int) $matches[1]) {
+                $id = (int) $matches[1];
+                $deleted = $this->database->deleteCar($id, (string) $this->config['app']['media_dir']);
+                $this->database->deleteSession($userId);
+                $this->telegram->answerCallbackQuery($callbackId, $deleted ? 'Удалено.' : 'Уже удалено.');
+                $this->telegram->sendMessage(
+                    $chatId,
+                    $deleted ? "Карточка #{$id} удалена." : "Карточка #{$id} уже отсутствует.",
+                    $this->homeKeyboard()
+                );
+                return;
+            }
+        }
         if ($session === null || ($session['step'] ?? '') !== 'confirm') {
             $this->telegram->answerCallbackQuery($callbackId, 'Черновик уже обработан.');
             return;
