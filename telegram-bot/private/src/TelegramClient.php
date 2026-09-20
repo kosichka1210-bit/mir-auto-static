@@ -64,6 +64,7 @@ final class TelegramClient
         curl_setopt_array($curl, [
             CURLOPT_FILE => $handle,
             CURLOPT_FOLLOWLOCATION => true,
+            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => 45,
             CURLOPT_FAILONERROR => true,
@@ -119,6 +120,7 @@ final class TelegramClient
             CURLOPT_POST => true,
             CURLOPT_POSTFIELDS => $payload,
             CURLOPT_RETURNTRANSFER => true,
+            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
             CURLOPT_CONNECTTIMEOUT => 10,
             CURLOPT_TIMEOUT => 30,
         ]);

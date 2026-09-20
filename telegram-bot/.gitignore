@@ -1,4 +1,5 @@
 private/config/config.php
+private/config/allowed-user-ids.php
 private/storage/
 public/media/cars/*
 !public/media/cars/.gitkeep
