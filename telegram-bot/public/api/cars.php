@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
+header('Cache-Control: no-store');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
+    http_response_code(405);
+    header('Allow: GET');
+    echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
+    exit;
+}
 
 try {
     $config = require dirname(__DIR__, 2) . '/private/src/bootstrap.php';
@@ -13,13 +21,6 @@ try {
     if ($origin !== '' && in_array($origin, $allowedOrigins, true)) {
         header('Access-Control-Allow-Origin: ' . $origin);
         header('Vary: Origin');
-    }
-
-    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'GET') {
-        http_response_code(405);
-        header('Allow: GET');
-        echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
-        exit;
     }
 
     $database = new Database($config['database']);

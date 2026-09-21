@@ -3,16 +3,17 @@
 declare(strict_types=1);
 
 header('Content-Type: application/json; charset=utf-8');
+header('Cache-Control: no-store');
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+    http_response_code(405);
+    header('Allow: POST');
+    echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
+    exit;
+}
 
 try {
     $config = require dirname(__DIR__, 2) . '/private/src/bootstrap.php';
-
-    if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
-        http_response_code(405);
-        header('Allow: POST');
-        echo json_encode(['ok' => false, 'error' => 'method_not_allowed']);
-        exit;
-    }
 
     $expectedSecret = (string) ($config['telegram']['webhook_secret'] ?? '');
     $receivedSecret = (string) ($_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN'] ?? '');
