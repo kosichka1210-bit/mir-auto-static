@@ -11,6 +11,9 @@ $origin = trim((string) ($_SERVER['HTTP_ORIGIN'] ?? ''));
 
 try {
     $privateDir = dirname(__DIR__, 2) . '/private';
+    ini_set('display_errors', '0');
+    ini_set('log_errors', '1');
+    ini_set('error_log', $privateDir . '/storage/contact-error.log');
     $config = require $privateDir . '/src/bootstrap.php';
     $allowedOrigins = array_values(array_filter(array_map('strval', $config['app']['cors_origins'] ?? [])));
 
