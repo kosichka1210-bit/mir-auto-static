@@ -1,0 +1,13 @@
+.env
+.env.*
+!.env.example
+*.log
+*.pem
+*.key
+telegram-bot/private/config.php
+telegram-bot/private/config/config.php
+telegram-bot/private/contact-config.php
+telegram-bot/private/allowed-user-ids.php
+telegram-bot/private/config/allowed-user-ids.php
+telegram-bot/private/storage/
+server-diagnostics/

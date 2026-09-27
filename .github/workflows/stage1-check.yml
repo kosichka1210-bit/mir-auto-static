@@ -1,0 +1,14 @@
+name: Check Stage 1 contact form
+on:
+  push:
+    branches: [stage1-telegram-form]
+permissions:
+  contents: read
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: node --check contact-form.js
+      - run: php -l telegram-bot/public/api/contact.php
+      - run: php -l telegram-bot/private/contact-config.example.php

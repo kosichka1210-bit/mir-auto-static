@@ -25,7 +25,7 @@ return [
         // Разрешённый адрес витрины. До покупки домена можно оставить GitHub Pages.
         'cors_origins' => [
             'https://kosichka1210-bit.github.io',
-            'https://YOUR-DOMAIN.RU',
+            'https://mir-auto-china.ru',
         ],
     ],
 ];
