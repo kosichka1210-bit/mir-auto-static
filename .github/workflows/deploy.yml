@@ -30,7 +30,7 @@ jobs:
           from pathlib import Path
           page = Path('site/index.html')
           html = page.read_text(encoding='utf-8')
-          marker = '<script src="contact-form.js?v=1" defer></script>'
+          marker = '<script src="contact-form.js?v=2" defer></script>'
           assert 'request-form' in html, 'Contact form missing in published archive'
           if marker not in html:
               assert '</body>' in html, 'Missing script insertion point'

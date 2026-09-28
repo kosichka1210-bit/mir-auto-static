@@ -56,7 +56,9 @@
     try {
       const response = await fetch(endpoint, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+        // text/plain is CORS-safelisted; the PHP endpoint still decodes the JSON body.
+        // This avoids an OPTIONS preflight on mobile browsers and restrictive networks.
+        headers: { 'Content-Type': 'text/plain;charset=UTF-8', Accept: 'application/json' },
         body: JSON.stringify(data),
         signal: controller.signal,
       });
