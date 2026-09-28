@@ -33,6 +33,7 @@
   }
   let lastSubmitAt = 0;
   let inFlight = false;
+  const buttonLabel = button.textContent;
 
   form.addEventListener('submit', async (event) => {
     event.preventDefault();
@@ -44,6 +45,8 @@
     const data = Object.fromEntries(new FormData(form).entries());
     lastSubmitAt = Date.now();
     button.disabled = true;
+    button.textContent = 'Отправляем…';
+    form.setAttribute('aria-busy', 'true');
     if (status) {
       status.hidden = false;
       status.textContent = 'Отправляем заявку…';
@@ -73,6 +76,8 @@
       clearTimeout(timeout);
       inFlight = false;
       button.disabled = false;
+      button.textContent = buttonLabel;
+      form.removeAttribute('aria-busy');
       if (honeypot) honeypot.value = '';
     }
   });
