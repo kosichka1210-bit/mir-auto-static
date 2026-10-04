@@ -39,6 +39,24 @@ final class TelegramClient
         return $this->request('sendMessage', $payload);
     }
 
+    public function sendMediaGroup(int $chatId, array $media): array
+    {
+        return $this->request('sendMediaGroup', [
+            'chat_id' => $chatId,
+            'media' => json_encode($media, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+        ]);
+    }
+
+    public function sendPhoto(int $chatId, string $photo, string $caption = ''): array
+    {
+        return $this->request('sendPhoto', [
+            'chat_id' => $chatId,
+            'photo' => $photo,
+            'caption' => $caption,
+            'parse_mode' => 'HTML',
+        ]);
+    }
+
     public function getMe(): array
     {
         return $this->request('getMe', []);

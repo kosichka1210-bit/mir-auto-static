@@ -20,6 +20,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Check Telegram bot PHP syntax
         run: find telegram-bot -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Test forwarded-post field parsing
+        run: php telegram-bot/tests/test-post-parser.php
       - name: Unpack site
         run: unzip -q timeweb-site.zip -d site
       - name: Connect protected Telegram contact form

@@ -96,6 +96,8 @@ try {
             if ($command === '/cancel') {
                 $stageStarted = hrtime(true);
                 $database = new Database($config['database']);
+                $existingSession = $database->getSession($userId);
+                Bot::cleanupDraftPhotoFiles($existingSession['draft'] ?? [], $config['app'] ?? []);
                 $database->deleteSession($userId);
                 $stages['mysql_ms'] = round((hrtime(true) - $stageStarted) / 1_000_000, 2);
                 $deliveryMode = 'telegram_webhook_reply';

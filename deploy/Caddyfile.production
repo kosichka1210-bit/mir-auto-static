@@ -15,7 +15,7 @@ http://bot.mir-auto-china.ru {
 }
 
 mir-auto-china.ru {
-	root * /srv/mir-auto/releases/20261004/public_html
+	root * /srv/mir-auto/current/public_html
 	encode zstd gzip
 	@vehiclePage path_regexp vehiclePage ^/avtomobili/([a-z0-9-]+)/?$
 	rewrite @vehiclePage /api/vehicle.php?slug={re.vehiclePage.1}
@@ -41,7 +41,7 @@ www.mir-auto-china.ru {
 }
 
 bot.mir-auto-china.ru {
-	root * /srv/mir-auto/releases/20261004/public_html
+	root * /srv/mir-auto/current/public_html
 	encode zstd gzip
 	log {
 		output file /var/log/caddy/mir-auto-access.log {

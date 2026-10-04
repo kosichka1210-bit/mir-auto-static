@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS cars (
     model VARCHAR(160) NOT NULL,
     title VARCHAR(220) NULL,
     year SMALLINT UNSIGNED NOT NULL,
+    year_detail VARCHAR(7) NULL,
     mileage_km INT UNSIGNED NULL,
     engine VARCHAR(100) NULL,
     power VARCHAR(100) NULL,

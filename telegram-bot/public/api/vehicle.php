@@ -37,8 +37,8 @@ try {
     $config = require dirname(__DIR__, 2) . '/private/src/bootstrap.php';
     $database = new Database($config['database']);
     $statement = $database->pdo()->prepare(
-        'SELECT id, slug, brand, model, title, year, mileage_km, engine, power, transmission,
-                drivetrain, trim_name, price_rub, price_location, status, description
+        'SELECT id, slug, brand, model, title, year, year_detail, mileage_km, engine, power, transmission,
+                drivetrain, trim_name, price_rub, price_location, city, status, description
          FROM cars WHERE slug = :slug AND published_at IS NOT NULL LIMIT 1'
     );
     $statement->execute(['slug' => $slug]);
@@ -111,12 +111,13 @@ if ($price !== null && $price > 0 && (string) $car['status'] !== 'Продано
 }
 $jsonLd = json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
 $specs = [
-    'Год' => (string) $car['year'],
+    'Год' => (string) ($car['year_detail'] ?: $car['year']),
     'Пробег' => $car['mileage_km'] !== null ? number_format((int) $car['mileage_km'], 0, ',', ' ') . ' км' : '',
     'Двигатель' => trim(implode(' · ', array_filter([(string) ($car['engine'] ?? ''), (string) ($car['power'] ?? '')]))),
     'Коробка передач' => (string) ($car['transmission'] ?? ''),
     'Привод' => (string) ($car['drivetrain'] ?? ''),
     'Комплектация' => (string) ($car['trim_name'] ?? ''),
+    'Город' => (string) ($car['city'] ?? ''),
 ];
 $specHtml = '';
 foreach ($specs as $label => $value) {

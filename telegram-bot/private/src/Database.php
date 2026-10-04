@@ -66,6 +66,123 @@ final class Database
         $statement->execute(['user_id' => $userId]);
     }
 
+    /** Atomically merges Telegram album updates into the user's private draft. */
+    public function appendForwardedPost(
+        int $userId,
+        int $chatId,
+        array $parsed,
+        int $messageId,
+        ?string $mediaGroupId,
+        ?string $photoFileId
+    ): array {
+        $this->pdo->beginTransaction();
+        try {
+            $emptyDraft = $parsed + [
+                'images' => [], 'photo_file_ids' => [], 'photo_message_ids' => [],
+                'media_group_id' => null, 'last_missing_prompt' => null,
+            ];
+            $insert = $this->pdo->prepare(
+                'INSERT IGNORE INTO bot_sessions (user_id, chat_id, step, draft_json)
+                 VALUES (:user_id, :chat_id, \'import_photos\', :draft_json)'
+            );
+            $insert->execute([
+                'user_id' => $userId,
+                'chat_id' => $chatId,
+                'draft_json' => json_encode($emptyDraft, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+            ]);
+            $created = $insert->rowCount() === 1;
+            $select = $this->pdo->prepare(
+                'SELECT step, draft_json FROM bot_sessions WHERE user_id = :user_id FOR UPDATE'
+            );
+            $select->execute(['user_id' => $userId]);
+            $row = $select->fetch();
+            if (!$row) throw new RuntimeException('Не удалось создать черновик импорта.');
+            if (!in_array((string) $row['step'], ['import_photos', 'import_missing'], true)) {
+                $this->pdo->commit();
+                return ['status' => 'busy', 'created' => false];
+            }
+
+            $draft = json_decode((string) $row['draft_json'], true, 512, JSON_THROW_ON_ERROR);
+            $oldGroup = (string) ($draft['media_group_id'] ?? '');
+            if ($mediaGroupId !== null && $oldGroup !== '' && $oldGroup !== $mediaGroupId) {
+                $this->pdo->commit();
+                return ['status' => 'different_import', 'created' => false];
+            }
+            if ($mediaGroupId !== null) $draft['media_group_id'] = $mediaGroupId;
+
+            foreach (['brand', 'model', 'title', 'year', 'year_detail', 'mileage_km', 'engine', 'power',
+                'transmission', 'drivetrain', 'trim_name', 'price_rub', 'price_on_request', 'price_location',
+                'city', 'status', 'description', 'notes', 'source'] as $field) {
+                if (array_key_exists($field, $parsed) && $parsed[$field] !== null && $parsed[$field] !== '') {
+                    $draft[$field] = $parsed[$field];
+                }
+            }
+            if (empty($draft['description']) && !empty($parsed['post_text'])) {
+                $draft['description'] = mb_substr((string) $parsed['post_text'], 0, 5000);
+                if (!empty($parsed['year_detail'])) {
+                    $draft['description'] .= "\nГод выпуска из исходной публикации: " . $parsed['year_detail'];
+                }
+            }
+
+            $seen = array_map('intval', $draft['photo_message_ids'] ?? []);
+            if (in_array($messageId, $seen, true)) {
+                $this->pdo->commit();
+                return ['status' => 'duplicate', 'created' => false, 'draft' => $draft];
+            }
+            $draft['photo_message_ids'][] = $messageId;
+            if ($photoFileId !== null && $photoFileId !== '') {
+                $ids = array_values(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
+                if (count($ids) < 10) $ids[] = $photoFileId;
+                $draft['photo_file_ids'] = array_slice(array_values(array_unique($ids)), 0, 10);
+            }
+            $draft['price_location'] = $draft['city'] ?? $draft['price_location'] ?? null;
+            $draft['title'] ??= trim((string) ($draft['brand'] ?? '') . ' ' . (string) ($draft['model'] ?? '') . ' ' . (string) ($draft['trim_name'] ?? ''));
+            $draft['status'] ??= 'В наличии';
+            $draft['last_missing_prompt'] ??= null;
+            $update = $this->pdo->prepare(
+                'UPDATE bot_sessions SET chat_id = :chat_id, step = \'import_photos\', draft_json = :draft_json,
+                    updated_at = CURRENT_TIMESTAMP WHERE user_id = :user_id'
+            );
+            $update->execute([
+                'chat_id' => $chatId,
+                'draft_json' => json_encode($draft, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),
+                'user_id' => $userId,
+            ]);
+            $this->pdo->commit();
+            return ['status' => 'saved', 'created' => $created, 'draft' => $draft];
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $exception;
+        }
+    }
+
+    /** Claims a draft step once, preventing repeated preview-button processing. */
+    public function claimSessionStep(int $userId, array $expectedSteps, string $newStep): ?array
+    {
+        $this->pdo->beginTransaction();
+        try {
+            $select = $this->pdo->prepare(
+                'SELECT chat_id, step, draft_json FROM bot_sessions WHERE user_id = :user_id FOR UPDATE'
+            );
+            $select->execute(['user_id' => $userId]);
+            $row = $select->fetch();
+            if (!$row || !in_array((string) $row['step'], $expectedSteps, true)) {
+                $this->pdo->commit();
+                return null;
+            }
+            $update = $this->pdo->prepare(
+                'UPDATE bot_sessions SET step = :step, updated_at = CURRENT_TIMESTAMP WHERE user_id = :user_id'
+            );
+            $update->execute(['step' => $newStep, 'user_id' => $userId]);
+            $draft = json_decode((string) $row['draft_json'], true, 512, JSON_THROW_ON_ERROR);
+            $this->pdo->commit();
+            return ['chat_id' => (int) $row['chat_id'], 'draft' => $draft];
+        } catch (Throwable $exception) {
+            if ($this->pdo->inTransaction()) $this->pdo->rollBack();
+            throw $exception;
+        }
+    }
+
     public function findCar(int $id): ?array
     {
         $statement = $this->pdo->prepare(
@@ -123,11 +240,11 @@ final class Database
 
             $statement = $this->pdo->prepare(
                 'INSERT INTO cars
-                    (slug, brand, model, title, year, mileage_km, engine, power, transmission, drivetrain,
+                    (slug, brand, model, title, year, year_detail, mileage_km, engine, power, transmission, drivetrain,
                      trim_name, price_rub, price_location, city, status, description, notes, features, source,
                      created_by, published_at)
                  VALUES
-                    (:slug, :brand, :model, :title, :year, :mileage_km, :engine, :power, :transmission,
+                    (:slug, :brand, :model, :title, :year, :year_detail, :mileage_km, :engine, :power, :transmission,
                      :drivetrain, :trim_name, :price_rub, :price_location, :city, :status,
                      :description, :notes, :features, :source, :created_by, CURRENT_TIMESTAMP)'
             );
@@ -137,6 +254,7 @@ final class Database
                 'model' => $draft['model'],
                 'title' => $draft['title'] ?? trim((string) $draft['brand'] . ' ' . (string) $draft['model']),
                 'year' => $draft['year'],
+                'year_detail' => $draft['year_detail'] ?? (string) $draft['year'],
                 'mileage_km' => $draft['mileage_km'] ?? null,
                 'engine' => $draft['engine'] ?? null,
                 'power' => $draft['power'] ?? null,

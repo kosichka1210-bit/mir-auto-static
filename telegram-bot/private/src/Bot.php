@@ -66,6 +66,7 @@ final class Bot
         }
 
         if ($text === '/cancel' || $text === 'Отменить') {
+            $this->discardDraftPhotos($this->database->getSession($userId)['draft'] ?? []);
             $this->database->deleteSession($userId);
             $this->telegram->sendMessage($chatId, 'Черновик отменён.', self::homeKeyboard());
             return;
@@ -98,6 +99,27 @@ final class Bot
         }
 
         $session = $this->database->getSession($userId);
+        $forwarded = $this->isForwardedMessage($message);
+        if ($session === null && $forwarded && ($text !== '' || !empty($message['photo']))) {
+            $result = $this->database->appendForwardedPost(
+                $userId,
+                $chatId,
+                $text !== '' ? TelegramCarPostParser::parse($text) : [],
+                (int) ($message['message_id'] ?? 0),
+                isset($message['media_group_id']) ? (string) $message['media_group_id'] : null,
+                $this->largestPhotoFileId($message)
+            );
+            if (($result['status'] ?? '') === 'saved' && !empty($result['created'])) {
+                $this->sendImportInstructions($chatId, $result['draft'] ?? []);
+            }
+            return;
+        }
+
+        if ($session !== null && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
+            $this->handleForwardImportMessage($message, $session, $userId, $chatId, $text);
+            return;
+        }
+
         if ($session === null) {
             $this->telegram->sendMessage($chatId, 'Нажмите «Добавить автомобиль», чтобы создать карточку.', self::homeKeyboard());
             return;
@@ -139,6 +161,7 @@ final class Bot
                 . "/delete ID — удалить после подтверждения\n"
                 . "/cancel — отменить текущий черновик\n\n"
                 . "После /addcar можно ответить одним сообщением:\n<code>Марка: Hyundai\nМодель: Elantra\nГод: 2023\nПробег: 12800\nЦена: 1515000\nСтатус: Под заказ\nОписание: ...</code>\n\n"
+                . "Можно вместо заполнения формы просто переслать сюда пост канала вместе с фотографией или альбомом. Я извлеку данные и покажу предпросмотр до публикации.\n\n"
                 . "Поля /edit: brand, model, title, year, mileage, engine, power, transmission, drive, equipment, price, city, status, description.\n\n"
                 . "Ваш Telegram ID: <code>{$userId}</code>",
             'reply_markup' => self::homeKeyboard(),
@@ -379,6 +402,139 @@ final class Bot
         $this->telegram->sendMessage($chatId, 'Фотография добавлена. Всего: ' . count($images) . '.');
     }
 
+    private function isForwardedMessage(array $message): bool
+    {
+        return isset($message['forward_origin']) || isset($message['forward_from_chat'])
+            || isset($message['forward_date']);
+    }
+
+    private function largestPhotoFileId(array $message): ?string
+    {
+        $photos = $message['photo'] ?? [];
+        if (!is_array($photos) || $photos === []) return null;
+        $largest = end($photos);
+        $fileId = is_array($largest) ? (string) ($largest['file_id'] ?? '') : '';
+        return $fileId !== '' ? $fileId : null;
+    }
+
+    private function sendImportInstructions(int $chatId, array $draft): void
+    {
+        $hasPhotos = !empty($draft['photo_file_ids']);
+        $text = $hasPhotos
+            ? '<b>Пересланный пост принят.</b> Собираю фотографии этого альбома. Когда Telegram закончит пересылку, нажмите «Проверить и показать предпросмотр».'
+            : '<b>Текст поста принят.</b> Теперь перешлите фотографию или альбом этого автомобиля. Когда всё придёт, нажмите «Проверить и показать предпросмотр».';
+        $this->telegram->sendMessage($chatId, $text, [
+            'inline_keyboard' => [
+                [['text' => 'Проверить и показать предпросмотр', 'callback_data' => 'preview_import']],
+                [['text' => 'Отменить импорт', 'callback_data' => 'cancel_publish']],
+            ],
+        ]);
+    }
+
+    private function handleForwardImportMessage(array $message, array $session, int $userId, int $chatId, string $text): void
+    {
+        $photoFileId = $this->largestPhotoFileId($message);
+        $parsed = $text !== '' ? TelegramCarPostParser::parse($text) : [];
+        $result = $this->database->appendForwardedPost(
+            $userId,
+            $chatId,
+            $parsed,
+            (int) ($message['message_id'] ?? 0),
+            isset($message['media_group_id']) ? (string) $message['media_group_id'] : null,
+            $photoFileId
+        );
+        if (($result['status'] ?? '') === 'duplicate') return;
+        if (in_array(($result['status'] ?? ''), ['busy', 'different_import'], true)) {
+            $this->telegram->sendMessage($chatId, 'Сначала завершите текущий импорт или отмените его командой /cancel.');
+            return;
+        }
+        $draft = $result['draft'] ?? [];
+        if (($session['step'] ?? '') === 'import_missing') {
+            $missing = TelegramCarPostParser::missing($draft);
+            if ($missing === []) {
+                $this->prepareForwardPreview($chatId, $userId);
+            } else {
+                $this->sendMissingFieldsOnce($chatId, $userId, $draft, $missing);
+            }
+        } elseif (!empty($result['created'])) {
+            $this->sendImportInstructions($chatId, $draft);
+        }
+    }
+
+    private function sendMissingFieldsOnce(int $chatId, int $userId, array $draft, array $missing): void
+    {
+        $signature = implode('|', $missing);
+        if (($draft['last_missing_prompt'] ?? null) !== $signature) {
+            $labels = implode("\n• ", $missing);
+            $this->telegram->sendMessage(
+                $chatId,
+                "Не хватает только этих обязательных данных:\n• {$labels}\n\nПришлите исправление отдельными строками, например <code>Цена: 1 425 000</code> или <code>Год: 2022.06</code>. Остальное переписывать не нужно. Необязательные характеристики можно пропустить.",
+                [
+                    'inline_keyboard' => [
+                        [['text' => 'Цена по запросу', 'callback_data' => 'import_price_request']],
+                        [['text' => 'Показать предпросмотр', 'callback_data' => 'preview_import']],
+                        [['text' => 'Отменить импорт', 'callback_data' => 'cancel_publish']],
+                    ],
+                ]
+            );
+            $draft['last_missing_prompt'] = $signature;
+        }
+        $this->database->saveSession($userId, $chatId, 'import_missing', $draft);
+    }
+
+    private function prepareForwardPreview(int $chatId, int $userId): void
+    {
+        $session = $this->database->getSession($userId);
+        if ($session === null || !in_array((string) $session['step'], ['import_photos', 'import_missing'], true)) return;
+        $draft = $session['draft'];
+        $missing = TelegramCarPostParser::missing($draft);
+        if ($missing !== []) {
+            $this->sendMissingFieldsOnce($chatId, $userId, $draft, $missing);
+            return;
+        }
+
+        $claimed = $this->database->claimSessionStep($userId, ['import_photos', 'import_missing'], 'import_processing');
+        if ($claimed === null) return;
+        $draft = $claimed['draft'];
+        $draftsDir = rtrim((string) $this->config['app']['drafts_dir'], '/\\');
+        $images = [];
+        try {
+            foreach (array_slice(array_values(array_unique(array_map('strval', $draft['photo_file_ids'] ?? []))), 0, 10) as $index => $fileId) {
+                $target = $draftsDir . DIRECTORY_SEPARATOR . $userId . DIRECTORY_SEPARATOR
+                    . sprintf('import-%02d-%s.jpg', $index + 1, bin2hex(random_bytes(4)));
+                $this->telegram->downloadPhoto($fileId, $target);
+                $images[] = $target;
+            }
+            $draft['images'] = $images;
+            $draft['preview_file_ids'] = array_values(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
+            $draft['status'] = in_array(($draft['status'] ?? ''), ['В наличии', 'Под заказ', 'Продано'], true)
+                ? $draft['status'] : 'В наличии';
+            $this->database->saveSession($userId, $chatId, 'confirm', $draft);
+            $this->showPreview($chatId, $draft);
+        } catch (Throwable $exception) {
+            $this->discardDraftPhotos(['images' => $images]);
+            $draft['images'] = [];
+            $this->database->saveSession($userId, $chatId, 'import_photos', $draft);
+            $this->telegram->sendMessage($chatId, 'Не удалось подготовить одну из фотографий. Черновик сохранён; попробуйте ещё раз нажать «Проверить и показать предпросмотр».');
+        }
+    }
+
+    private function discardDraftPhotos(array $draft): void
+    {
+        self::cleanupDraftPhotoFiles($draft, $this->config['app'] ?? []);
+    }
+
+    public static function cleanupDraftPhotoFiles(array $draft, array $appConfig): void
+    {
+        $root = realpath((string) ($appConfig['drafts_dir'] ?? ''));
+        if ($root === false) return;
+        foreach ($draft['images'] ?? [] as $path) {
+            if (!is_string($path)) continue;
+            $real = realpath($path);
+            if ($real !== false && str_starts_with($real, $root . DIRECTORY_SEPARATOR) && is_file($real)) @unlink($real);
+        }
+    }
+
     private function handleCallback(array $callback): void
     {
         $callbackId = (string) ($callback['id'] ?? '');
@@ -395,6 +551,32 @@ final class Bot
         }
 
         $session = $this->database->getSession($userId);
+        if ($action === 'import_price_request' && $session !== null
+            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
+            $draft = $session['draft'];
+            $draft['price_on_request'] = true;
+            $draft['price_rub'] = null;
+            $missing = TelegramCarPostParser::missing($draft);
+            $this->database->saveSession($userId, $chatId, 'import_missing', $draft);
+            $this->telegram->answerCallbackQuery($callbackId, 'Цена отмечена как «по запросу».');
+            if ($missing === []) $this->prepareForwardPreview($chatId, $userId);
+            else $this->sendMissingFieldsOnce($chatId, $userId, $draft, $missing);
+            return;
+        }
+        if ($action === 'preview_import' && $session !== null
+            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
+            $this->telegram->answerCallbackQuery($callbackId, 'Проверяю данные и фотографии.');
+            $this->prepareForwardPreview($chatId, $userId);
+            return;
+        }
+        if ($action === 'cancel_publish' && $session !== null
+            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing', 'confirm', 'import_processing'], true)) {
+            $this->discardDraftPhotos($session['draft'] ?? []);
+            $this->database->deleteSession($userId);
+            $this->telegram->answerCallbackQuery($callbackId, 'Импорт отменён.');
+            $this->telegram->sendMessage($chatId, 'Черновик удалён; автомобиль не опубликован.', self::homeKeyboard());
+            return;
+        }
         if (($session['step'] ?? '') === 'delete_confirm') {
             if ($action === 'cancel_delete') {
                 $this->database->deleteSession($userId);
@@ -422,6 +604,7 @@ final class Bot
         }
 
         if ($action === 'cancel_publish') {
+            $this->discardDraftPhotos($session['draft'] ?? []);
             $this->database->deleteSession($userId);
             $this->telegram->answerCallbackQuery($callbackId, 'Отменено.');
             $this->telegram->sendMessage($chatId, 'Карточка не опубликована.', self::homeKeyboard());
@@ -458,12 +641,30 @@ final class Bot
 
         $text = "<b>Предварительный просмотр</b>\n\n"
             . '<b>' . $this->escape((string) $draft['brand'] . ' ' . (string) $draft['model']) . "</b>\n"
-            . 'Год: ' . (int) $draft['year'] . "\n"
+            . 'Год: ' . $this->escape((string) ($draft['year_detail'] ?? $draft['year'])) . "\n"
+            . 'Двигатель: ' . $this->escape((string) ($draft['engine'] ?? 'не указан')) . "\n"
+            . 'Мощность: ' . $this->escape((string) ($draft['power'] ?? 'не указана')) . "\n"
+            . 'Привод: ' . $this->escape((string) ($draft['drivetrain'] ?? 'не указан')) . "\n"
+            . 'Коробка: ' . $this->escape((string) ($draft['transmission'] ?? 'не указана')) . "\n"
             . 'Пробег: ' . $mileage . "\n"
-            . 'Цена: ' . $price . "\n"
+            . 'Комплектация: ' . $this->escape((string) ($draft['trim_name'] ?? 'не указана')) . "\n"
+            . 'Город: ' . $this->escape((string) ($draft['city'] ?? 'не указан')) . "\n"
+            . 'Цена: ' . (!empty($draft['price_on_request']) ? 'по запросу' : $price) . "\n"
             . 'Статус: ' . $this->escape((string) $draft['status']) . "\n"
             . 'Фотографий: ' . count($draft['images'] ?? [])
             . "\n\nПроверьте данные. После публикации карточка попадёт в базу каталога.";
+
+        if (!empty($draft['description'])) {
+            $text .= "\n\nОписание: " . $this->escape(mb_substr((string) $draft['description'], 0, 700));
+        }
+
+        $fileIds = array_values(array_filter(array_map('strval', $draft['preview_file_ids'] ?? [])));
+        if (count($fileIds) === 1) {
+            $this->telegram->sendPhoto($chatId, $fileIds[0], 'Фото из пересланной публикации');
+        } elseif (count($fileIds) > 1) {
+            $media = array_map(static fn (string $id): array => ['type' => 'photo', 'media' => $id], $fileIds);
+            $this->telegram->sendMediaGroup($chatId, $media);
+        }
 
         $this->telegram->sendMessage($chatId, $text, [
             'inline_keyboard' => [

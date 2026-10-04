@@ -28,7 +28,7 @@ try {
     $slug = trim((string) ($_GET['slug'] ?? ''));
     $limit = max(1, min(100, (int) ($_GET['limit'] ?? 50)));
 
-    $sql = 'SELECT id, slug, brand, model, title, year, mileage_km, engine, power, transmission,
+    $sql = 'SELECT id, slug, brand, model, title, year, year_detail, mileage_km, engine, power, transmission,
                    drivetrain AS drive, trim_name AS equipment, price_rub, price_location, city, status,
                    description, notes, features, source, published_at, updated_at
             FROM cars

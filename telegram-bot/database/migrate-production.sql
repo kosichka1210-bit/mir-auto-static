@@ -1,5 +1,6 @@
 -- Safe, repeatable production migration for an existing MIR AUTO database.
 ALTER TABLE cars ADD COLUMN IF NOT EXISTS title VARCHAR(220) NULL AFTER model;
+ALTER TABLE cars ADD COLUMN IF NOT EXISTS year_detail VARCHAR(7) NULL AFTER year;
 ALTER TABLE cars ADD COLUMN IF NOT EXISTS power VARCHAR(100) NULL AFTER engine;
 ALTER TABLE cars ADD COLUMN IF NOT EXISTS city VARCHAR(100) NULL AFTER price_location;
 ALTER TABLE cars ADD COLUMN IF NOT EXISTS features JSON NULL AFTER notes;

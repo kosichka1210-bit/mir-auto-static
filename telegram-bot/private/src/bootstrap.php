@@ -28,6 +28,7 @@ $config['telegram']['allowed_user_ids'] = array_values(array_unique(array_merge(
 
 require_once __DIR__ . '/Database.php';
 require_once __DIR__ . '/TelegramClient.php';
+require_once __DIR__ . '/TelegramCarPostParser.php';
 require_once __DIR__ . '/Bot.php';
 
 return $config;
