@@ -114,7 +114,6 @@ final class TelegramClient
             'url' => $webhookUrl,
             'secret_token' => $secret,
             'allowed_updates' => json_encode(['message', 'callback_query'], JSON_THROW_ON_ERROR),
-            'drop_pending_updates' => true,
         ]);
     }
 
