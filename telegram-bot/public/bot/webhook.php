@@ -15,12 +15,17 @@ $deliveryMode = 'bot_handler';
 $logTiming = static function (string $result) use (&$stages, &$command, &$deliveryMode, $requestStarted): void {
     $timings = $stages;
     $timings['total_ms'] = round((hrtime(true) - $requestStarted) / 1_000_000, 2);
-    error_log('MIR_AUTO webhook_perf ' . json_encode([
+    $context = [
         'command' => $command,
         'delivery' => $deliveryMode,
         'result' => $result,
         'timings' => $timings,
-    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    ];
+    if (class_exists(TelegramClient::class)) {
+        TelegramClient::logPerformance('webhook_perf', $context);
+    } else {
+        error_log('MIR_AUTO webhook_perf ' . json_encode($context, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
 };
 
 $replyThroughWebhook = static function (int $chatId, array $message) use ($logTiming): never {
@@ -125,11 +130,16 @@ try {
     echo json_encode(['ok' => true]);
 } catch (Throwable $exception) {
     $reason = $exception instanceof PDOException ? 'mysql_error' : 'processing_error';
-    error_log('MIR_AUTO webhook_error ' . json_encode([
+    $errorContext = [
         'command' => $command,
         'reason' => $reason,
         'exception' => get_class($exception),
-    ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    ];
+    if (class_exists(TelegramClient::class)) {
+        TelegramClient::logPerformance('webhook_error', $errorContext);
+    } else {
+        error_log('MIR_AUTO webhook_error ' . json_encode($errorContext, JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+    }
     $logTiming('error');
     http_response_code(500);
     echo json_encode(['ok' => false, 'error' => 'internal_error']);

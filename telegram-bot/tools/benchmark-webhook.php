@@ -16,8 +16,11 @@ if ($allowedUsers === []) {
 
 $probeUserId = $allowedUsers[0];
 $cancelUserId = null;
+$mysqlStarted = hrtime(true);
 try {
     $database = new Database($config['database']);
+    $database->pdo()->query('SELECT 1')->fetchColumn();
+    $mysqlConnectMs = round((hrtime(true) - $mysqlStarted) / 1_000_000, 2);
     foreach ($allowedUsers as $candidate) {
         if ($database->getSession($candidate) === null) {
             $cancelUserId = $candidate;
@@ -89,6 +92,10 @@ $results = [
         'ok' => ($me['ok'] ?? false) === true,
         'username' => $me['result']['username'] ?? null,
         'http_api_elapsed_ms' => $getMeMs,
+    ],
+    'mysql' => [
+        'select_1_ok' => true,
+        'connect_and_query_ms' => $mysqlConnectMs,
     ],
     'start' => $measureCommand('/start', $probeUserId),
     'help' => $measureCommand('/help', $probeUserId),

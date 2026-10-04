@@ -49,6 +49,37 @@ final class TelegramClient
         return $this->request('getWebhookInfo', []);
     }
 
+    /** @param array<string, scalar|null> $context */
+    public static function logPerformance(string $category, array $context): void
+    {
+        if (preg_match('/^[a-z_]+$/', $category) !== 1) {
+            return;
+        }
+
+        $line = 'MIR_AUTO ' . $category . ' ' . json_encode(
+            $context,
+            JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR
+        ) . PHP_EOL;
+        $path = dirname(__DIR__) . '/storage/webhook-performance.log';
+        $handle = @fopen($path, 'ab+');
+        if ($handle === false) {
+            error_log($line);
+            return;
+        }
+
+        if (flock($handle, LOCK_EX)) {
+            $stat = fstat($handle);
+            if (($stat['size'] ?? 0) > 524288) {
+                ftruncate($handle, 0);
+            }
+            fwrite($handle, $line);
+            fflush($handle);
+            flock($handle, LOCK_UN);
+        }
+        fclose($handle);
+        @chmod($path, 0600);
+    }
+
     public function answerCallbackQuery(string $callbackQueryId, string $text = ''): array
     {
         return $this->request('answerCallbackQuery', [
@@ -169,14 +200,14 @@ final class TelegramClient
             $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
             curl_close($curl);
 
-            error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+            self::logPerformance('telegram_api_perf', [
                 'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
                 'attempt' => $attempt,
                 'attempt_ms' => round((hrtime(true) - $attemptStarted) / 1_000_000, 2),
                 'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
                 'http_status' => $status,
                 'transport' => $body === false ? 'failed' : 'response',
-            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ]);
 
             if ($body !== false) {
                 break;
@@ -184,32 +215,32 @@ final class TelegramClient
         }
 
         if ($body === false) {
-            error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+            self::logPerformance('telegram_api_perf', [
                 'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
                 'result' => 'timeout_or_connect_error',
                 'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
-            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ]);
             throw new RuntimeException('Не удалось соединиться с Telegram API за отведённое время.');
         }
 
         $decoded = json_decode($body, true);
         if ($status >= 400 || !is_array($decoded) || ($decoded['ok'] ?? false) !== true) {
-            error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+            self::logPerformance('telegram_api_perf', [
                 'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
                 'result' => 'api_error',
                 'http_status' => $status,
                 'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
-            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            ]);
             $description = is_array($decoded) ? ($decoded['description'] ?? 'неизвестная ошибка') : 'некорректный ответ';
             throw new RuntimeException('Telegram Bot API: ' . $description);
         }
 
-        error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+        self::logPerformance('telegram_api_perf', [
             'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
             'result' => 'ok',
             'http_status' => $status,
             'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
-        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+        ]);
 
         return $decoded;
     }
