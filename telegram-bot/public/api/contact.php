@@ -98,10 +98,12 @@ try {
     if (!is_dir($rateDir)) {
         @mkdir($rateDir, 0700, true);
     }
-    $rateKey = hash('sha256', (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown'));
-    $rateFile = $rateDir . '/' . $rateKey;
+    $rateKey = hash('sha256', (string) ($_SERVER['REMOTE_ADDR'] ?? 'unknown') . "\0" . (string) ($_SERVER['HTTP_USER_AGENT'] ?? ''));
+    $rateFile = $rateDir . '/' . $rateKey . '.v2';
     $lock = fopen($rateFile, 'c+');
-    if ($lock === false || !flock($lock, LOCK_EX | LOCK_NB)) {
+    // Serialize closely-spaced taps, then deduplicate the same payload instead
+    // of failing the second request while Telegram is still responding.
+    if ($lock === false || !flock($lock, LOCK_EX)) {
         http_response_code(429);
         echo json_encode(['ok' => false, 'error' => 'request_in_progress']);
         exit;
@@ -109,10 +111,14 @@ try {
     $previous = json_decode(stream_get_contents($lock), true) ?: [];
     $fingerprint = hash('sha256', json_encode($fields));
     if (($previous['sent'] ?? false) && ($previous['fingerprint'] ?? '') === $fingerprint && time() - ($previous['time'] ?? 0) < 600) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
         echo json_encode(['ok' => true]);
         exit;
     }
-    if (time() - ($previous['time'] ?? 0) < 60) {
+    if (time() - ($previous['time'] ?? 0) < 15) {
+        flock($lock, LOCK_UN);
+        fclose($lock);
         http_response_code(429);
         echo json_encode(['ok' => false, 'error' => 'too_many_requests']);
         exit;
@@ -125,15 +131,19 @@ try {
     };
     $saveState(false);
 
-    // The private bootstrap merges the administrator and approved staff IDs.
-    // Keep recipients server-side; never accept a destination from the form.
-    $recipientIds = array_values(array_unique(array_filter(array_map(
-        'intval',
-        $config['telegram']['allowed_user_ids'] ?? []
+    // The administrator is the required destination; approved staff are
+    // notified best-effort. Destinations always come from private config.
+    $contactConfig = require $privateDir . '/contact-config.php';
+    $adminRecipientIds = array_values(array_unique(array_filter(array_map(
+        'intval', $contactConfig['recipient_ids'] ?? []
     ), static fn(int $id): bool => $id > 0)));
-    if ($recipientIds === []) {
+    if (count($adminRecipientIds) !== 1) {
         throw new RuntimeException('Не настроены получатели заявок.');
     }
+    $staffRecipientIds = array_values(array_unique(array_filter(array_map(
+        'intval', $config['telegram']['allowed_user_ids'] ?? []
+    ), static fn(int $id): bool => $id > 0 && !in_array($id, $adminRecipientIds, true))));
+    $recipientIds = array_values(array_unique(array_merge($adminRecipientIds, $staffRecipientIds)));
 
     $now = new DateTimeImmutable('now', new DateTimeZone('Europe/Moscow'));
     $message = "🟣 <b>Новая заявка MIR AUTO</b>\n\n"
@@ -145,7 +155,7 @@ try {
         . "Источник: сайт MIR AUTO\n"
         . 'Дата и время: ' . $now->format('d.m.Y H:i');
 
-    $sent = 0;
+    $adminSent = 0;
     foreach ($recipientIds as $recipientId) {
         if ($recipientId <= 0) {
             continue;
@@ -170,17 +180,21 @@ try {
                 throw new RuntimeException('Telegram rejected delivery');
             }
             error_log('MIR AUTO contact: delivered message_id=' . (int) ($result['result']['message_id'] ?? 0));
-            $sent++;
+            if (in_array($recipientId, $adminRecipientIds, true)) {
+                $adminSent++;
+            }
         } catch (Throwable $exception) {
             error_log('MIR AUTO contact: delivery failed');
         }
     }
 
-    if ($sent !== count($recipientIds)) {
+    if ($adminSent !== count($adminRecipientIds)) {
         throw new RuntimeException('Не удалось доставить заявку.');
     }
 
     $saveState(true);
+    flock($lock, LOCK_UN);
+    fclose($lock);
     echo json_encode(['ok' => true]);
 } catch (JsonException | InvalidArgumentException $exception) {
     http_response_code(400);
