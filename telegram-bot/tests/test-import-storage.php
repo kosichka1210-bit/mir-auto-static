@@ -12,6 +12,12 @@ $database = new Database($config['database']);
 $userId = random_int(8_000_000_000_000_000_000, 9_000_000_000_000_000_000);
 
 try {
+    $yearDetailColumn = (int) $database->pdo()->query(
+        "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = 'cars' AND column_name = 'year_detail'"
+    )->fetchColumn();
+    if ($yearDetailColumn !== 1) {
+        throw new RuntimeException('The additive year_detail migration is not available.');
+    }
     $first = TelegramCarPostParser::parse("Haval H6 Champion Edition\n2022.06\nЦена: 1.425.000");
     $one = $database->appendForwardedPost($userId, $userId, $first, 10001, 'test-album', 'test-file-1');
     $two = $database->appendForwardedPost($userId, $userId, [], 10002, 'test-album', 'test-file-2');
@@ -21,6 +27,7 @@ try {
     if (($one['status'] ?? '') !== 'saved' || ($two['status'] ?? '') !== 'saved'
         || ($duplicate['status'] ?? '') !== 'duplicate'
         || count($draft['photo_file_ids'] ?? []) !== 2
+        || ($draft['year_detail'] ?? null) !== '2022.06'
         || ($draft['price_rub'] ?? null) !== 1425000) {
         throw new RuntimeException('Album append, duplicate suppression or parsed price check failed.');
     }

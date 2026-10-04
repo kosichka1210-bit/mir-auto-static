@@ -48,15 +48,19 @@ try {
     chmod($optionFile, 0600);
     $command = escapeshellarg($dumpCommand)
         . ' --defaults-extra-file=' . escapeshellarg($optionFile)
-        . ' --single-transaction --routines --triggers --events --databases '
+        . ' --single-transaction --quick --skip-lock-tables --no-tablespaces --skip-triggers --databases '
         . escapeshellarg($databaseName)
         . ' | gzip -c > ' . escapeshellarg($backupPath);
     $output = [];
     $status = 0;
-    exec('bash -o pipefail -c ' . escapeshellarg($command) . ' 2>/dev/null', $output, $status);
+    exec('bash -o pipefail -c ' . escapeshellarg($command) . ' 2>&1', $output, $status);
     if ($status !== 0 || !is_file($backupPath) || filesize($backupPath) < 100) {
         @unlink($backupPath);
-        throw new RuntimeException('Database backup command failed.');
+        $safeOutput = strtolower(implode(' ', $output));
+        $reason = str_contains($safeOutput, 'access denied')
+            ? 'The backup utility is missing database dump privileges.'
+            : 'The database dump utility failed; no migration was applied.';
+        throw new RuntimeException($reason);
     }
     chmod($backupPath, 0600);
     echo 'Private database backup created and gzip-verified; bytes=' . filesize($backupPath) . PHP_EOL;
