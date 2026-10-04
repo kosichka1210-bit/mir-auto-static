@@ -218,6 +218,7 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
         "const detailsUrl = new URL(`avtomobili/avtomobil/?slug=${encodeURIComponent(car.slug)}`, siteRoot).href;",
         "const detailsUrl = new URL(`avtomobili/${encodeURIComponent(car.slug)}/`, siteRoot).href;",
     )
+    source = source.replace("      car.year,\n", "      car.year_detail || car.year,\n")
     script.write_text(source, encoding="utf-8", newline="")
 
 
