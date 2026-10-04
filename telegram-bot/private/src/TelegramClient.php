@@ -64,7 +64,9 @@ final class TelegramClient
         $downloadUrl = 'https://api.telegram.org/file/bot' . $this->token . '/' . ltrim($remotePath, '/');
         $success = false;
         $error = '';
-        foreach ([self::PREFERRED_API_IPV4, null] as $preferredIp) {
+        // Retry the known-good Telegram IPv4 before falling back to DNS,
+        // whose normal answer is intermittently unreachable from this host.
+        foreach ([self::PREFERRED_API_IPV4, self::PREFERRED_API_IPV4, null] as $preferredIp) {
             $handle = fopen($targetPath, 'wb');
             if ($handle === false) {
                 throw new RuntimeException('Не удалось создать временный файл фотографии.');
@@ -137,15 +139,15 @@ final class TelegramClient
         $body = false;
         $status = 0;
         $error = '';
-        foreach ([self::PREFERRED_API_IPV4, null] as $preferredIp) {
+        foreach ([self::PREFERRED_API_IPV4, self::PREFERRED_API_IPV4, null] as $preferredIp) {
             $curl = curl_init($this->apiBase . $method);
             $options = [
                 CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => $payload,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-                CURLOPT_CONNECTTIMEOUT => 2,
-                CURLOPT_TIMEOUT => 6,
+                CURLOPT_CONNECTTIMEOUT => 4,
+                CURLOPT_TIMEOUT => 8,
             ];
             if ($preferredIp !== null) {
                 $options[CURLOPT_RESOLVE] = ['api.telegram.org:443:' . $preferredIp];
