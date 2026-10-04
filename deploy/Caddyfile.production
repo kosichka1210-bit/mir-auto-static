@@ -1,0 +1,65 @@
+http://mir-auto-china.ru {
+	redir https://mir-auto-china.ru{uri} permanent
+}
+
+http://www.mir-auto-china.ru {
+	redir https://mir-auto-china.ru{uri} permanent
+}
+
+http://bot.mir-auto-china.ru {
+	redir https://bot.mir-auto-china.ru{uri} permanent
+}
+
+:80 {
+	respond 404
+}
+
+mir-auto-china.ru {
+	root * /srv/mir-auto/releases/20261004/public_html
+	encode zstd gzip
+	@vehiclePage path_regexp vehiclePage ^/avtomobili/([a-z0-9-]+)/?$
+	rewrite @vehiclePage /api/vehicle.php?slug={re.vehiclePage.1}
+	@sitemap path /sitemap.xml
+	rewrite @sitemap /api/sitemap.php
+	@noDynamic {
+		path /api/* /bot/*
+		not path /api/vehicle.php /api/sitemap.php
+	}
+	respond @noDynamic 404
+	@blockedPHP {
+		path_regexp php \.php(?:$|/)
+		not path /api/vehicle.php /api/sitemap.php
+	}
+	respond @blockedPHP 404
+	@sitePHP path /api/vehicle.php /api/sitemap.php
+	php_fastcgi @sitePHP unix//run/php/php8.5-fpm.sock
+	file_server
+}
+
+www.mir-auto-china.ru {
+	redir https://mir-auto-china.ru{uri} permanent
+}
+
+bot.mir-auto-china.ru {
+	root * /srv/mir-auto/releases/20261004/public_html
+	encode zstd gzip
+	log {
+		output file /var/log/caddy/mir-auto-access.log {
+			roll_size 10MiB
+			roll_keep 3
+		}
+		format filter {
+			request>headers>X-Telegram-Bot-Api-Secret-Token delete
+		}
+	}
+	@blockedPHP {
+		path_regexp php \.php(?:$|/)
+		not path /api/cars.php /api/contact.php /api/vehicle.php /api/sitemap.php /bot/webhook.php
+	}
+	respond @blockedPHP 404
+	@mirAutoPHP path /api/cars.php /api/contact.php /api/vehicle.php /api/sitemap.php /bot/webhook.php
+	php_fastcgi @mirAutoPHP unix//run/php/php8.5-fpm.sock
+	@notApi not path /api/cars.php /api/contact.php /api/vehicle.php /api/sitemap.php /bot/webhook.php
+	respond @notApi 404
+	file_server
+}

@@ -37,6 +37,8 @@ jobs:
               html = html.replace('</body>', marker + '\n</body>', 1)
           page.write_text(html, encoding='utf-8')
           PY
+      - name: Add MIR AUTO SEO metadata and sitemap
+        run: python3 tools/enrich_site_seo.py site
       - uses: actions/configure-pages@v5
         with:
           enablement: true

@@ -67,7 +67,7 @@ final class Bot
 
         if ($text === '/cancel' || $text === 'Отменить') {
             $this->database->deleteSession($userId);
-            $this->telegram->sendMessage($chatId, 'Черновик отменён.', $this->homeKeyboard());
+            $this->telegram->sendMessage($chatId, 'Черновик отменён.', self::homeKeyboard());
             return;
         }
 
@@ -99,7 +99,7 @@ final class Bot
 
         $session = $this->database->getSession($userId);
         if ($session === null) {
-            $this->telegram->sendMessage($chatId, 'Нажмите «Добавить автомобиль», чтобы создать карточку.', $this->homeKeyboard());
+            $this->telegram->sendMessage($chatId, 'Нажмите «Добавить автомобиль», чтобы создать карточку.', self::homeKeyboard());
             return;
         }
 
@@ -123,20 +123,32 @@ final class Bot
 
     private function showHome(int $chatId, int $userId): void
     {
-        $this->telegram->sendMessage(
-            $chatId,
-            "<b>MIR AUTO — каталог</b>\n\n"
-            . "/addcar — добавить автомобиль\n"
-            . "/cars — последние автомобили\n"
-            . "/edit ID поле значение — изменить карточку\n"
-            . "/sold ID — отметить проданной\n"
-            . "/delete ID — удалить после подтверждения\n"
-            . "/cancel — отменить текущий черновик\n\n"
-            . "После /addcar можно ответить одним сообщением:\n<code>Марка: Hyundai\nМодель: Elantra\nГод: 2023\nПробег: 12800\nЦена: 1515000\nСтатус: Под заказ\nОписание: ...</code>\n\n"
-            . "Поля /edit: brand, model, title, year, mileage, engine, power, transmission, drive, equipment, price, city, status, description.\n\n"
-            . "Ваш Telegram ID: <code>{$userId}</code>",
-            $this->homeKeyboard()
-        );
+        $reply = self::homeMessage($userId);
+        $this->telegram->sendMessage($chatId, $reply['text'], $reply['reply_markup']);
+    }
+
+    /** @return array{text:string,reply_markup:array} */
+    public static function homeMessage(int $userId): array
+    {
+        return [
+            'text' => "<b>MIR AUTO — каталог</b>\n\n"
+                . "/addcar — добавить автомобиль\n"
+                . "/cars — последние автомобили\n"
+                . "/edit ID поле значение — изменить карточку\n"
+                . "/sold ID — отметить проданной\n"
+                . "/delete ID — удалить после подтверждения\n"
+                . "/cancel — отменить текущий черновик\n\n"
+                . "После /addcar можно ответить одним сообщением:\n<code>Марка: Hyundai\nМодель: Elantra\nГод: 2023\nПробег: 12800\nЦена: 1515000\nСтатус: Под заказ\nОписание: ...</code>\n\n"
+                . "Поля /edit: brand, model, title, year, mileage, engine, power, transmission, drive, equipment, price, city, status, description.\n\n"
+                . "Ваш Telegram ID: <code>{$userId}</code>",
+            'reply_markup' => self::homeKeyboard(),
+        ];
+    }
+
+    /** @return array{text:string} */
+    public static function accessDeniedMessage(int $userId): array
+    {
+        return ['text' => "Этот бот доступен только представителям MIR AUTO.\nВаш Telegram ID: <code>{$userId}</code>"];
     }
 
     private function handleSoldCommand(int $chatId, string $text): void
@@ -151,7 +163,7 @@ final class Bot
             return;
         }
         $this->database->updateCarField($id, 'status', 'Продано');
-        $this->telegram->sendMessage($chatId, "Автомобиль #{$id} отмечен как «Продано».", $this->homeKeyboard());
+        $this->telegram->sendMessage($chatId, "Автомобиль #{$id} отмечен как «Продано».", self::homeKeyboard());
     }
 
     private function handleEditCommand(int $chatId, string $text): void
@@ -181,7 +193,7 @@ final class Bot
         }
         try {
             $this->database->updateCarField($id, $field, $value);
-            $this->telegram->sendMessage($chatId, "Карточка #{$id} обновлена.", $this->homeKeyboard());
+            $this->telegram->sendMessage($chatId, "Карточка #{$id} обновлена.", self::homeKeyboard());
         } catch (InvalidArgumentException $exception) {
             $this->telegram->sendMessage($chatId, $exception->getMessage());
         }
@@ -214,7 +226,7 @@ final class Bot
         $step = (string) $session['step'];
         if (!isset($this->steps[$step])) {
             $this->database->deleteSession($userId);
-            $this->telegram->sendMessage($chatId, 'Черновик был повреждён и сброшен. Начните заново.', $this->homeKeyboard());
+            $this->telegram->sendMessage($chatId, 'Черновик был повреждён и сброшен. Начните заново.', self::homeKeyboard());
             return;
         }
 
@@ -387,7 +399,7 @@ final class Bot
             if ($action === 'cancel_delete') {
                 $this->database->deleteSession($userId);
                 $this->telegram->answerCallbackQuery($callbackId, 'Отменено.');
-                $this->telegram->sendMessage($chatId, 'Удаление отменено.', $this->homeKeyboard());
+                $this->telegram->sendMessage($chatId, 'Удаление отменено.', self::homeKeyboard());
                 return;
             }
             if (preg_match('/^delete_car:(\d+)$/', $action, $matches)
@@ -399,7 +411,7 @@ final class Bot
                 $this->telegram->sendMessage(
                     $chatId,
                     $deleted ? "Карточка #{$id} удалена." : "Карточка #{$id} уже отсутствует.",
-                    $this->homeKeyboard()
+                    self::homeKeyboard()
                 );
                 return;
             }
@@ -412,7 +424,7 @@ final class Bot
         if ($action === 'cancel_publish') {
             $this->database->deleteSession($userId);
             $this->telegram->answerCallbackQuery($callbackId, 'Отменено.');
-            $this->telegram->sendMessage($chatId, 'Карточка не опубликована.', $this->homeKeyboard());
+            $this->telegram->sendMessage($chatId, 'Карточка не опубликована.', self::homeKeyboard());
             return;
         }
 
@@ -431,7 +443,7 @@ final class Bot
         $this->telegram->sendMessage(
             $chatId,
             '<b>Автомобиль опубликован.</b>\nID: ' . $result['id'] . '\nАдрес карточки: <code>' . htmlspecialchars($result['slug']) . '</code>',
-            $this->homeKeyboard()
+            self::homeKeyboard()
         );
     }
 
@@ -470,7 +482,7 @@ final class Bot
         )->fetchAll();
 
         if ($rows === []) {
-            $this->telegram->sendMessage($chatId, 'В базе пока нет автомобилей.', $this->homeKeyboard());
+            $this->telegram->sendMessage($chatId, 'В базе пока нет автомобилей.', self::homeKeyboard());
             return;
         }
 
@@ -486,7 +498,7 @@ final class Bot
             );
         }
 
-        $this->telegram->sendMessage($chatId, implode("\n", $lines), $this->homeKeyboard());
+        $this->telegram->sendMessage($chatId, implode("\n", $lines), self::homeKeyboard());
     }
 
     private function askStep(int $chatId, string $step): void
@@ -511,7 +523,7 @@ final class Bot
         ]);
     }
 
-    private function homeKeyboard(): array
+    private static function homeKeyboard(): array
     {
         return [
             'keyboard' => [

@@ -39,6 +39,16 @@ final class TelegramClient
         return $this->request('sendMessage', $payload);
     }
 
+    public function getMe(): array
+    {
+        return $this->request('getMe', []);
+    }
+
+    public function getWebhookInfo(): array
+    {
+        return $this->request('getWebhookInfo', []);
+    }
+
     public function answerCallbackQuery(string $callbackQueryId, string $text = ''): array
     {
         return $this->request('answerCallbackQuery', [
@@ -66,7 +76,7 @@ final class TelegramClient
         $error = '';
         // Retry the known-good Telegram IPv4 before falling back to DNS,
         // whose normal answer is intermittently unreachable from this host.
-        foreach ([self::PREFERRED_API_IPV4, self::PREFERRED_API_IPV4, null] as $preferredIp) {
+        foreach ([self::PREFERRED_API_IPV4, null] as $preferredIp) {
             $handle = fopen($targetPath, 'wb');
             if ($handle === false) {
                 throw new RuntimeException('Не удалось создать временный файл фотографии.');
@@ -77,8 +87,8 @@ final class TelegramClient
                 CURLOPT_FILE => $handle,
                 CURLOPT_FOLLOWLOCATION => true,
                 CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_TIMEOUT => 12,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT => 8,
                 CURLOPT_FAILONERROR => true,
             ];
             if ($preferredIp !== null) {
@@ -98,7 +108,7 @@ final class TelegramClient
 
         if ($success === false) {
             @unlink($targetPath);
-            throw new RuntimeException('Не удалось скачать фотографию: ' . $error);
+            throw new RuntimeException('Не удалось скачать фотографию с Telegram за отведённое время.');
         }
 
         $imageInfo = @getimagesize($targetPath);
@@ -137,16 +147,19 @@ final class TelegramClient
     {
         $body = false;
         $status = 0;
-        $error = '';
-        foreach ([self::PREFERRED_API_IPV4, self::PREFERRED_API_IPV4, null] as $preferredIp) {
+        $started = hrtime(true);
+        $attempt = 0;
+        foreach ([self::PREFERRED_API_IPV4, null] as $preferredIp) {
+            $attempt++;
+            $attemptStarted = hrtime(true);
             $curl = curl_init($this->apiBase . $method);
             $options = [
                 CURLOPT_POST => true,
                 CURLOPT_POSTFIELDS => $payload,
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-                CURLOPT_CONNECTTIMEOUT => 4,
-                CURLOPT_TIMEOUT => 8,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT => 5,
             ];
             if ($preferredIp !== null) {
                 $options[CURLOPT_RESOLVE] = ['api.telegram.org:443:' . $preferredIp];
@@ -154,8 +167,16 @@ final class TelegramClient
             curl_setopt_array($curl, $options);
             $body = curl_exec($curl);
             $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-            $error = curl_error($curl);
             curl_close($curl);
+
+            error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+                'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
+                'attempt' => $attempt,
+                'attempt_ms' => round((hrtime(true) - $attemptStarted) / 1_000_000, 2),
+                'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+                'http_status' => $status,
+                'transport' => $body === false ? 'failed' : 'response',
+            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
             if ($body !== false) {
                 break;
@@ -163,14 +184,32 @@ final class TelegramClient
         }
 
         if ($body === false) {
-            throw new RuntimeException('Ошибка соединения с Telegram: ' . $error);
+            error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+                'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
+                'result' => 'timeout_or_connect_error',
+                'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
+            throw new RuntimeException('Не удалось соединиться с Telegram API за отведённое время.');
         }
 
         $decoded = json_decode($body, true);
         if ($status >= 400 || !is_array($decoded) || ($decoded['ok'] ?? false) !== true) {
+            error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+                'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
+                'result' => 'api_error',
+                'http_status' => $status,
+                'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+            ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
             $description = is_array($decoded) ? ($decoded['description'] ?? 'неизвестная ошибка') : 'некорректный ответ';
             throw new RuntimeException('Telegram Bot API: ' . $description);
         }
+
+        error_log('MIR_AUTO telegram_api_perf ' . json_encode([
+            'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
+            'result' => 'ok',
+            'http_status' => $status,
+            'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+        ], JSON_UNESCAPED_SLASHES | JSON_THROW_ON_ERROR));
 
         return $decoded;
     }
