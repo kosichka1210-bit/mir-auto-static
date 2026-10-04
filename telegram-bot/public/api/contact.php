@@ -156,29 +156,13 @@ try {
         . 'Дата и время: ' . $now->format('d.m.Y H:i');
 
     $adminSent = 0;
+    $telegram = new TelegramClient((string) $config['telegram']['token']);
     foreach ($recipientIds as $recipientId) {
         if ($recipientId <= 0) {
             continue;
         }
         try {
-            $curl = curl_init('https://api.telegram.org/bot' . $config['telegram']['token'] . '/sendMessage');
-            curl_setopt_array($curl, [
-                CURLOPT_POST => true,
-                CURLOPT_POSTFIELDS => ['chat_id' => $recipientId, 'text' => $message, 'parse_mode' => 'HTML'],
-                CURLOPT_RETURNTRANSFER => true,
-                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-                CURLOPT_CONNECTTIMEOUT => 3,
-                CURLOPT_TIMEOUT => 10,
-            ]);
-            $response = curl_exec($curl);
-            $http = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-            $errno = curl_errno($curl);
-            curl_close($curl);
-            $result = is_string($response) ? json_decode($response, true) : null;
-            if ($http !== 200 || ($result['ok'] ?? false) !== true) {
-                error_log('MIR AUTO contact: telegram_http=' . $http . ' curl_errno=' . $errno);
-                throw new RuntimeException('Telegram rejected delivery');
-            }
+            $result = $telegram->sendMessage($recipientId, $message);
             error_log('MIR AUTO contact: delivered message_id=' . (int) ($result['result']['message_id'] ?? 0));
             if (in_array($recipientId, $adminRecipientIds, true)) {
                 $adminSent++;
