@@ -125,13 +125,13 @@ try {
     };
     $saveState(false);
 
-    $contactConfig = require $privateDir . '/contact-config.php';
-    $recipientIds = array_values(array_unique(array_map(
+    // The private bootstrap merges the administrator and approved staff IDs.
+    // Keep recipients server-side; never accept a destination from the form.
+    $recipientIds = array_values(array_unique(array_filter(array_map(
         'intval',
-        $contactConfig['recipient_ids'] ?? []
-    )));
-    // Stage 1 delivers only to the explicitly configured administrator.
-    if (count($recipientIds) !== 1 || $recipientIds[0] <= 0) {
+        $config['telegram']['allowed_user_ids'] ?? []
+    ), static fn(int $id): bool => $id > 0)));
+    if ($recipientIds === []) {
         throw new RuntimeException('Не настроены получатели заявок.');
     }
 

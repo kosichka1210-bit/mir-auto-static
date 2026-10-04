@@ -40,7 +40,8 @@
     if (inFlight || Date.now() - lastSubmitAt < 4000 || !form.reportValidity()) return;
     inFlight = true;
     const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 15000);
+    // Allow time for the server's bounded Telegram IPv4 retry on slow mobile links.
+    const timeout = setTimeout(() => controller.abort(), 30000);
 
     const data = Object.fromEntries(new FormData(form).entries());
     lastSubmitAt = Date.now();

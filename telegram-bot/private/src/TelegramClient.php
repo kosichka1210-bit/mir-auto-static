@@ -4,6 +4,12 @@ declare(strict_types=1);
 
 final class TelegramClient
 {
+    /**
+     * This host's normal resolver currently returns a Telegram address that
+     * times out. Prefer the verified reachable IPv4, then fall back to DNS.
+     */
+    private const PREFERRED_API_IPV4 = '149.154.167.220';
+
     private string $token;
     private string $apiBase;
 
@@ -55,25 +61,38 @@ final class TelegramClient
             throw new RuntimeException('Не удалось создать папку для временной фотографии.');
         }
 
-        $handle = fopen($targetPath, 'wb');
-        if ($handle === false) {
-            throw new RuntimeException('Не удалось создать временный файл фотографии.');
+        $downloadUrl = 'https://api.telegram.org/file/bot' . $this->token . '/' . ltrim($remotePath, '/');
+        $success = false;
+        $error = '';
+        foreach ([self::PREFERRED_API_IPV4, null] as $preferredIp) {
+            $handle = fopen($targetPath, 'wb');
+            if ($handle === false) {
+                throw new RuntimeException('Не удалось создать временный файл фотографии.');
+            }
+
+            $curl = curl_init($downloadUrl);
+            $options = [
+                CURLOPT_FILE => $handle,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                CURLOPT_CONNECTTIMEOUT => 3,
+                CURLOPT_TIMEOUT => 12,
+                CURLOPT_FAILONERROR => true,
+            ];
+            if ($preferredIp !== null) {
+                $options[CURLOPT_RESOLVE] = ['api.telegram.org:443:' . $preferredIp];
+            }
+            curl_setopt_array($curl, $options);
+            $success = curl_exec($curl);
+            $error = curl_error($curl);
+            curl_close($curl);
+            fclose($handle);
+
+            if ($success !== false) {
+                break;
+            }
+            @unlink($targetPath);
         }
-
-        $curl = curl_init('https://api.telegram.org/file/bot' . $this->token . '/' . ltrim($remotePath, '/'));
-        curl_setopt_array($curl, [
-            CURLOPT_FILE => $handle,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 20,
-            CURLOPT_FAILONERROR => true,
-        ]);
-
-        $success = curl_exec($curl);
-        $error = curl_error($curl);
-        curl_close($curl);
-        fclose($handle);
 
         if ($success === false) {
             @unlink($targetPath);
@@ -115,20 +134,32 @@ final class TelegramClient
 
     private function request(string $method, array $payload): array
     {
-        $curl = curl_init($this->apiBase . $method);
-        curl_setopt_array($curl, [
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-            CURLOPT_CONNECTTIMEOUT => 5,
-            CURLOPT_TIMEOUT => 15,
-        ]);
+        $body = false;
+        $status = 0;
+        $error = '';
+        foreach ([self::PREFERRED_API_IPV4, null] as $preferredIp) {
+            $curl = curl_init($this->apiBase . $method);
+            $options = [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                CURLOPT_CONNECTTIMEOUT => 2,
+                CURLOPT_TIMEOUT => 6,
+            ];
+            if ($preferredIp !== null) {
+                $options[CURLOPT_RESOLVE] = ['api.telegram.org:443:' . $preferredIp];
+            }
+            curl_setopt_array($curl, $options);
+            $body = curl_exec($curl);
+            $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+            $error = curl_error($curl);
+            curl_close($curl);
 
-        $body = curl_exec($curl);
-        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        $error = curl_error($curl);
-        curl_close($curl);
+            if ($body !== false) {
+                break;
+            }
+        }
 
         if ($body === false) {
             throw new RuntimeException('Ошибка соединения с Telegram: ' . $error);
