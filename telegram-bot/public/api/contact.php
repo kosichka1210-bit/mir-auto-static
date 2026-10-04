@@ -161,14 +161,19 @@ try {
         if ($recipientId <= 0) {
             continue;
         }
+        $isAdminRecipient = in_array($recipientId, $adminRecipientIds, true);
         try {
             $result = $telegram->sendMessage($recipientId, $message);
             error_log('MIR AUTO contact: delivered message_id=' . (int) ($result['result']['message_id'] ?? 0));
-            if (in_array($recipientId, $adminRecipientIds, true)) {
+            if ($isAdminRecipient) {
                 $adminSent++;
             }
         } catch (Throwable $exception) {
-            error_log('MIR AUTO contact: delivery failed');
+            $reason = str_replace((string) $config['telegram']['token'], '[redacted]', $exception->getMessage());
+            $reason = preg_replace('/\b\d{7,}\b/u', '[id]', $reason) ?? 'delivery error';
+            $reason = preg_replace('/[^\p{L}\p{N} _:-]/u', ' ', $reason) ?? 'delivery error';
+            $reason = mb_substr(trim($reason), 0, 140);
+            error_log('MIR AUTO contact: delivery failed role=' . ($isAdminRecipient ? 'admin' : 'staff') . ' reason=' . ($reason !== '' ? $reason : 'unknown'));
         }
     }
 
