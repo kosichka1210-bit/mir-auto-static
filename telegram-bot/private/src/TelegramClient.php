@@ -121,25 +121,40 @@ final class TelegramClient
         }
 
         $downloadUrl = 'https://api.telegram.org/file/bot' . $this->token . '/' . ltrim($remotePath, '/');
-        $handle = fopen($targetPath, 'wb');
-        if ($handle === false) {
-            throw new RuntimeException('Не удалось создать временный файл фотографии.');
-        }
+        $success = false;
+        $error = '';
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $handle = fopen($targetPath, 'wb');
+            if ($handle === false) {
+                throw new RuntimeException('Не удалось создать временный файл фотографии.');
+            }
 
-        $curl = curl_init($downloadUrl);
-        curl_setopt_array($curl, [
-            CURLOPT_FILE => $handle,
-            CURLOPT_FOLLOWLOCATION => true,
-            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-            CURLOPT_CONNECTTIMEOUT => 1,
-            CURLOPT_TIMEOUT => 5,
-            CURLOPT_FAILONERROR => true,
-            CURLOPT_RESOLVE => ['api.telegram.org:443:' . self::PREFERRED_API_IPV4],
-        ]);
-        $success = curl_exec($curl);
-        $error = curl_error($curl);
-        curl_close($curl);
-        fclose($handle);
+            $curl = curl_init($downloadUrl);
+            curl_setopt_array($curl, [
+                CURLOPT_FILE => $handle,
+                CURLOPT_FOLLOWLOCATION => true,
+                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                CURLOPT_CONNECTTIMEOUT => 1,
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_FAILONERROR => true,
+                CURLOPT_RESOLVE => ['api.telegram.org:443:' . self::PREFERRED_API_IPV4],
+            ]);
+            $success = curl_exec($curl);
+            $curlErrno = curl_errno($curl);
+            $connectSeconds = (float) curl_getinfo($curl, CURLINFO_CONNECT_TIME);
+            $error = curl_error($curl);
+            curl_close($curl);
+            fclose($handle);
+
+            if ($success !== false) {
+                break;
+            }
+            @unlink($targetPath);
+            if ($attempt === 2 || $curlErrno !== CURLE_OPERATION_TIMEDOUT || $connectSeconds > 0.001) {
+                break;
+            }
+            usleep(150_000);
+        }
 
         if ($success === false) {
             @unlink($targetPath);
@@ -183,27 +198,43 @@ final class TelegramClient
         $body = false;
         $status = 0;
         $started = hrtime(true);
-        $curl = curl_init($this->apiBase . $method);
-        curl_setopt_array($curl, [
-            CURLOPT_POST => true,
-            CURLOPT_POSTFIELDS => $payload,
-            CURLOPT_RETURNTRANSFER => true,
-            CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
-            CURLOPT_CONNECTTIMEOUT => 1,
-            CURLOPT_TIMEOUT => 5,
-            CURLOPT_RESOLVE => ['api.telegram.org:443:' . self::PREFERRED_API_IPV4],
-        ]);
-        $body = curl_exec($curl);
-        $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
-        curl_close($curl);
+        for ($attempt = 1; $attempt <= 2; $attempt++) {
+            $attemptStarted = hrtime(true);
+            $curl = curl_init($this->apiBase . $method);
+            curl_setopt_array($curl, [
+                CURLOPT_POST => true,
+                CURLOPT_POSTFIELDS => $payload,
+                CURLOPT_RETURNTRANSFER => true,
+                CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
+                CURLOPT_CONNECTTIMEOUT => 1,
+                CURLOPT_TIMEOUT => 5,
+                CURLOPT_RESOLVE => ['api.telegram.org:443:' . self::PREFERRED_API_IPV4],
+            ]);
+            $body = curl_exec($curl);
+            $status = (int) curl_getinfo($curl, CURLINFO_RESPONSE_CODE);
+            $curlErrno = curl_errno($curl);
+            $connectSeconds = (float) curl_getinfo($curl, CURLINFO_CONNECT_TIME);
+            curl_close($curl);
 
-        self::logPerformance('telegram_api_perf', [
-            'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
-            'attempt' => 1,
-            'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
-            'http_status' => $status,
-            'transport' => $body === false ? 'failed' : 'response',
-        ]);
+            self::logPerformance('telegram_api_perf', [
+                'method' => preg_match('/^[A-Za-z]+$/', $method) === 1 ? $method : 'unknown',
+                'attempt' => $attempt,
+                'attempt_ms' => round((hrtime(true) - $attemptStarted) / 1_000_000, 2),
+                'connect_ms' => round($connectSeconds * 1000, 2),
+                'curl_errno' => $curlErrno,
+                'api_elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+                'http_status' => $status,
+                'transport' => $body === false ? 'failed' : 'response',
+            ]);
+
+            if ($body !== false) {
+                break;
+            }
+            if ($attempt === 2 || $curlErrno !== CURLE_OPERATION_TIMEDOUT || $connectSeconds > 0.001) {
+                break;
+            }
+            usleep(150_000);
+        }
 
         if ($body === false) {
             self::logPerformance('telegram_api_perf', [
