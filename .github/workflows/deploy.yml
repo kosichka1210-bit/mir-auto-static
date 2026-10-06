@@ -10,7 +10,22 @@ permissions:
   id-token: write
 
 jobs:
+  php-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.5'
+          extensions: mbstring
+      - name: Check Telegram bot PHP syntax
+        run: find telegram-bot -name '*.php' -print0 | xargs -0 -n1 php -l
+      - name: Test forwarded-post field parsing
+        run: php telegram-bot/tests/test-post-parser.php
+
   publish:
+    needs: php-checks
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     environment:

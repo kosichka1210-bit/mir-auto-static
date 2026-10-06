@@ -93,6 +93,15 @@ try {
                 $replyThroughWebhook($chatId, Bot::accessDeniedMessage($userId));
             }
 
+            if ($command === '/addcar') {
+                $stageStarted = hrtime(true);
+                $database = new Database($config['database']);
+                $database->saveSession($userId, $chatId, 'brand', ['images' => []]);
+                $stages['mysql_ms'] = round((hrtime(true) - $stageStarted) / 1_000_000, 2);
+                $deliveryMode = 'telegram_webhook_reply';
+                $replyThroughWebhook($chatId, Bot::addCarPromptMessage());
+            }
+
             if ($command === '/cancel') {
                 $stageStarted = hrtime(true);
                 $database = new Database($config['database']);
@@ -118,18 +127,49 @@ try {
         }
     }
 
-    $stageStarted = hrtime(true);
-    $database = new Database($config['database']);
-    $stages['mysql_connect_ms'] = round((hrtime(true) - $stageStarted) / 1_000_000, 2);
+    $updateId = filter_var($update['update_id'] ?? null, FILTER_VALIDATE_INT);
+    if ($updateId === false || $updateId === null || $updateId < 0) {
+        throw new RuntimeException('В обновлении отсутствует корректный update_id.');
+    }
 
-    $telegram = new TelegramClient((string) $config['telegram']['token']);
-    $bot = new Bot($telegram, $database, $config);
-    $stageStarted = hrtime(true);
-    $bot->handle($update);
-    $stages['handler_ms'] = round((hrtime(true) - $stageStarted) / 1_000_000, 2);
+    $queueDir = dirname(__DIR__, 2) . '/private/storage/update-queue';
+    $doneDir = $queueDir . '/done';
+    foreach ([$queueDir, $doneDir] as $directory) {
+        if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) {
+            throw new RuntimeException('Не удалось подготовить закрытую очередь обновлений.');
+        }
+        @chmod($directory, 0700);
+    }
 
-    $logTiming('ok');
+    $queueName = sprintf('%020d', $updateId);
+    $queuePath = $queueDir . '/' . $queueName . '.json';
+    $processingPath = $queuePath . '.processing';
+    $donePath = $doneDir . '/' . $queueName . '.done';
+    if (!is_file($donePath) && !is_file($processingPath) && !is_file($queuePath)) {
+        $temporaryPath = tempnam($queueDir, '.incoming-');
+        if ($temporaryPath === false || file_put_contents($temporaryPath, (string) $rawBody, LOCK_EX) === false) {
+            throw new RuntimeException('Не удалось записать обновление в закрытую очередь.');
+        }
+        @chmod($temporaryPath, 0600);
+        if (!@link($temporaryPath, $queuePath) && !is_file($queuePath)) {
+            @unlink($temporaryPath);
+            throw new RuntimeException('Не удалось добавить обновление в очередь.');
+        }
+        @unlink($temporaryPath);
+    }
+
+    $stages['queue_ms'] = round((hrtime(true) - $stageStarted) / 1_000_000, 2);
+    $deliveryMode = 'durable_queue';
+    $logTiming('queued');
+    http_response_code(200);
     echo json_encode(['ok' => true]);
+    if (function_exists('fastcgi_finish_request')) {
+        fastcgi_finish_request();
+    } else {
+        @ob_flush();
+        flush();
+    }
+    exit;
 } catch (Throwable $exception) {
     $reason = $exception instanceof PDOException ? 'mysql_error' : 'processing_error';
     $errorContext = [

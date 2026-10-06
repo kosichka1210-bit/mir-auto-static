@@ -168,6 +168,15 @@ final class Bot
         ];
     }
 
+    /** @return array{text:string,reply_markup:array} */
+    public static function addCarPromptMessage(): array
+    {
+        return [
+            'text' => '<b>1/12. Марка</b>' . "\n" . 'Например: Hyundai',
+            'reply_markup' => self::homeKeyboard(),
+        ];
+    }
+
     /** @return array{text:string} */
     public static function accessDeniedMessage(int $userId): array
     {
