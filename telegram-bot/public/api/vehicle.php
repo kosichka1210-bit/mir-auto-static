@@ -152,7 +152,7 @@ if ($images === []) {
 <meta name="description" content="<?= $escape($description) ?>">
 <link rel="canonical" href="<?= $escape($canonical) ?>">
 <meta property="og:type" content="website"><meta property="og:site_name" content="MIR AUTO"><meta property="og:title" content="<?= $escape($title) ?> — MIR AUTO"><meta property="og:description" content="<?= $escape($description) ?>"><meta property="og:url" content="<?= $escape($canonical) ?>"><meta property="og:image" content="<?= $escape($image) ?>"><meta property="og:image:alt" content="<?= $escape($title) ?> — фотографии автомобиля"><meta property="og:locale" content="ru_RU"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=24"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
+<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=25"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
 <script type="application/ld+json"><?= $jsonLd ?></script>
 </head>
 <body>
