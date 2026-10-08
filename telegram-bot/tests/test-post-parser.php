@@ -23,7 +23,7 @@ if (($parsed['trim_name'] ?? '') !== 'Champion Edition') {
     exit(1);
 }
 $multilinePrice = TelegramCarPostParser::parse(
-    "GAC Trumpchi GS8\n2022.10\nСтоимость автомобиля, под ключ в г. Владивостоке:\n1.380.000 ₽ по актуальному курсу"
+    "GAC Trumpchi GS8\n2022.10\nСтоимость автомобиля, под ключ в г. Владивостоке:\n💵 1.380.000 💵 по актуальному курсу"
 );
 if (($multilinePrice['price_rub'] ?? null) !== 1380000 || ($multilinePrice['city'] ?? null) !== 'Владивосток') {
     fwrite(STDERR, 'FAIL multiline price/city: ' . json_encode([
