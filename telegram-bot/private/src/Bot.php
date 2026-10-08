@@ -724,7 +724,9 @@ final class Bot
                 self::homeKeyboard()
             );
         } catch (Throwable $exception) {
-            $draft['publish_retry_after'] = time() + 15;
+            // Keep the retry gate short: a transient file API timeout should
+            // not force the user to wait through a long cooldown.
+            $draft['publish_retry_after'] = time() + 3;
             $this->database->saveSession($userId, $chatId, 'confirm', $draft);
             TelegramClient::logPerformance('car_publish_error', [
                 'error_class' => get_class($exception),

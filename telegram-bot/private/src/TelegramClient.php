@@ -199,7 +199,11 @@ final class TelegramClient
         $body = false;
         $status = 0;
         $started = hrtime(true);
-        for ($attempt = 1; $attempt <= 2; $attempt++) {
+        // Telegram's file metadata endpoint intermittently times out on this
+        // production route. Retry it once more than ordinary API calls so a
+        // single album photo does not abort an otherwise complete publication.
+        $maxAttempts = $method === 'getFile' ? 3 : 2;
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
             $attemptStarted = hrtime(true);
             $curl = curl_init($this->apiBase . $method);
             curl_setopt_array($curl, [
@@ -231,7 +235,7 @@ final class TelegramClient
             if ($body !== false) {
                 break;
             }
-            if ($attempt === 2 || $curlErrno !== CURLE_OPERATION_TIMEDOUT || $connectSeconds > 0.001) {
+            if ($attempt === $maxAttempts || $curlErrno !== CURLE_OPERATION_TIMEDOUT || $connectSeconds > 0.001) {
                 break;
             }
             usleep(150_000);
