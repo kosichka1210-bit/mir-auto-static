@@ -117,11 +117,8 @@ final class Database
                     $draft[$field] = $parsed[$field];
                 }
             }
-            if (empty($draft['description']) && !empty($parsed['post_text'])) {
-                $draft['description'] = mb_substr((string) $parsed['post_text'], 0, 5000);
-                if (!empty($parsed['year_detail'])) {
-                    $draft['description'] .= "\nГод выпуска из исходной публикации: " . $parsed['year_detail'];
-                }
+            if (empty($draft['description'])) {
+                $draft['description'] = 'Автомобиль из опубликованного предложения MIR AUTO. Свяжитесь с представителями, чтобы уточнить актуальность и условия покупки.';
             }
 
             $seen = array_map('intval', $draft['photo_message_ids'] ?? []);

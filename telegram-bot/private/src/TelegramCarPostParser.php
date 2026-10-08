@@ -137,8 +137,46 @@ final class TelegramCarPostParser
             }
         }
         $draft['price_location'] = $draft['city'] ?? null;
+        $description = trim((string) ($draft['description'] ?? ''));
+        $draft['description'] = $description !== ''
+            ? self::cleanDescription($description)
+            : self::extractDescription($lines, $draft);
+        if ($draft['description'] === '') unset($draft['description']);
         $draft['title'] ??= trim(implode(' ', array_filter([$draft['brand'] ?? null, $draft['model'] ?? null, $draft['trim_name'] ?? null])));
         return $draft;
+    }
+
+    /** Keep only vehicle-specific descriptive copy, not specs or seller boilerplate. */
+    private static function extractDescription(array $lines, array $draft): string
+    {
+        $paragraphs = preg_split('/\n\s*\n/u', implode("\n", $lines)) ?: [];
+        $kept = [];
+        $vehiclePrefix = trim((string) ($draft['brand'] ?? '') . ' ' . (string) ($draft['model'] ?? ''));
+        foreach ($paragraphs as $paragraph) {
+            $cleanLines = [];
+            foreach (preg_split('/\n/u', $paragraph) ?: [] as $line) {
+                $line = self::cleanDescriptionLine($line);
+                if ($line === '' || preg_match('/[\p{L}]{2}/u', $line) !== 1) continue;
+                if ($vehiclePrefix !== '' && preg_match('/^' . preg_quote($vehiclePrefix, '/') . '(?:\s|$)/iu', $line) === 1) continue;
+                if (preg_match('/^(?:[-–—]\s*)?(?:(?:19|20)\d{2}(?:[.\/-]\d{1,2})?\s*(?:год)?|пробег\b|двигатель\b|мотор\b|мощность\b|привод\b|коробка\b|кпп\b|трансмиссия\b|цена\b|стоимость\b|город\b|статус\b|марка\b|модель\b|комплектация\s*:|версия\s*:|\d(?:[.,]\d)?\s*[TТ](?:\s|$)|\d{2,3}\s*л\.?\s*с\.?\b|(?:2WD|4WD|AWD|4x4|CVT)\b|автомат\b|робот\b|механика\b|вариатор\b)/ui', $line) === 1) continue;
+                if (preg_match('/китайская экспортная компания|без посредник|сопровождение сделки|стоимость автомобиля|по актуальному курсу|«?мир авто»|ваш путь к идеальному|под ключ|\bвладимир\b|\bолег\b|мы в max|https?:\/\/|t\.me\//ui', $line) === 1) continue;
+                if (preg_match('/(?:\+?\d[\d() -]{8,}\d)/u', $line) === 1) continue;
+                $cleanLines[] = $line;
+            }
+            if ($cleanLines !== []) $kept[] = implode(' ', $cleanLines);
+        }
+        return mb_substr(trim(implode("\n\n", $kept)), 0, 1200);
+    }
+
+    private static function cleanDescription(string $description): string
+    {
+        return self::extractDescription(preg_split('/\n/u', $description) ?: [], []);
+    }
+
+    private static function cleanDescriptionLine(string $line): string
+    {
+        $line = preg_replace('/[\p{So}\p{Sk}\p{Mn}]/u', '', $line) ?? $line;
+        return trim((string) preg_replace('/^[\p{P}\p{S}\s]+|[\p{P}\s]+$/u', '', $line));
     }
 
     /** Merge only fields found in a short correction message. */
@@ -186,7 +224,8 @@ final class TelegramCarPostParser
     {
         if (preg_match('/\b((?:19|20)\d{2})(?:[.\/-](0?[1-9]|1[0-2]))?\b/u', $value, $match) !== 1) return;
         $draft['year'] = (int) $match[1];
-        $draft['year_detail'] = isset($match[2]) ? $match[1] . '.' . str_pad($match[2], 2, '0', STR_PAD_LEFT) : $match[1];
+        // Display the year in the catalog, not the source post's month.
+        $draft['year_detail'] = $match[1];
     }
 
     private static function setPrice(array &$draft, string $value): void

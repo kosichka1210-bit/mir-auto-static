@@ -59,7 +59,7 @@ bot.mir-auto-china.ru {
 	respond @blockedPHP 404
 	@mirAutoPHP path /api/cars.php /api/contact.php /api/vehicle.php /api/sitemap.php /bot/webhook.php
 	php_fastcgi @mirAutoPHP unix//run/php/php8.5-fpm.sock
-	@notApi not path /api/cars.php /api/contact.php /api/vehicle.php /api/sitemap.php /bot/webhook.php
+	@notApi not path /api/cars.php /api/contact.php /api/vehicle.php /api/sitemap.php /bot/webhook.php /media/*
 	respond @notApi 404
 	file_server
 }

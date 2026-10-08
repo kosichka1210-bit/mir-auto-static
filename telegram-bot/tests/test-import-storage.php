@@ -27,7 +27,7 @@ try {
     if (($one['status'] ?? '') !== 'saved' || ($two['status'] ?? '') !== 'saved'
         || ($duplicate['status'] ?? '') !== 'duplicate'
         || count($draft['photo_file_ids'] ?? []) !== 2
-        || ($draft['year_detail'] ?? null) !== '2022.06'
+        || ($draft['year_detail'] ?? null) !== '2022'
         || ($draft['price_rub'] ?? null) !== 1425000) {
         throw new RuntimeException('Album append, duplicate suppression or parsed price check failed.');
     }

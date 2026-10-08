@@ -814,7 +814,7 @@ final class Bot
 
         $text = "<b>Предварительный просмотр</b>\n\n"
             . '<b>' . $this->escape((string) $draft['brand'] . ' ' . (string) $draft['model']) . "</b>\n"
-            . 'Год: ' . $this->escape((string) ($draft['year_detail'] ?? $draft['year'])) . "\n"
+            . 'Год: ' . $this->escape((string) $draft['year']) . "\n"
             . 'Двигатель: ' . $this->escape((string) ($draft['engine'] ?? 'не указан')) . "\n"
             . 'Мощность: ' . $this->escape((string) ($draft['power'] ?? 'не указана')) . "\n"
             . 'Привод: ' . $this->escape((string) ($draft['drivetrain'] ?? 'не указан')) . "\n"

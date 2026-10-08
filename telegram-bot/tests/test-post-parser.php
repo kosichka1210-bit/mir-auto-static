@@ -7,7 +7,7 @@ require_once __DIR__ . '/../private/src/TelegramCarPostParser.php';
 $post = "Haval H6 Champion Edition\n2022.06\n1.5T\n150 л.с.\n2WD — передний привод\nРобот\nПробег: 37 000 км\nКомплектация: Champion Edition\nСтоимость автомобиля: 1.425.000 ₽\nГород: Владивосток";
 $parsed = TelegramCarPostParser::parse($post);
 $expected = [
-    'brand' => 'Haval', 'model' => 'H6', 'year' => 2022, 'year_detail' => '2022.06',
+    'brand' => 'Haval', 'model' => 'H6', 'year' => 2022, 'year_detail' => '2022',
     'engine' => '1.5T', 'power' => '150 л.с.', 'drivetrain' => '2WD — передний привод',
     'transmission' => 'Робот', 'mileage_km' => 37000, 'price_rub' => 1425000,
     'city' => 'Владивосток',
@@ -20,6 +20,17 @@ foreach ($expected as $field => $value) {
 }
 if (($parsed['trim_name'] ?? '') !== 'Champion Edition') {
     fwrite(STDERR, 'FAIL trim_name: ' . var_export($parsed['trim_name'] ?? null, true) . PHP_EOL);
+    exit(1);
+}
+$messyPost = "☄️ 😉😉😉✅\n\n🚙GAC Trumpchi GS4 (270T Smart Technology)\n\n⚙️\n- 2022.10 год\n- 1.5T (169 л.с.)\n- 2WD передний привод\n- Автомат\n- пробег 33.000 км.\n\n➡️ Хорошая комплектация. Ассистенты, кожаный салон, панорама, повторители в зеркалах, круиз, климат, сенсорная мультимедия, багажник с кнопки, обзор 360, выбор режимов движения, мультируль, управление светом.\n\n✅ Мы — Китайская экспортная компания с прямой продажей без посредников.\nСопровождение сделки под ключ!\n\nСтоимость автомобиля, под ключ в г. Владивостоке:\n💸1.380.000 по актуальному курсу\n\n«Мир Авто» — Ваш путь к идеальному автомобилю!";
+$cleanDescription = TelegramCarPostParser::parse($messyPost);
+if (($cleanDescription['year_detail'] ?? null) !== '2022'
+    || !str_starts_with((string) ($cleanDescription['description'] ?? ''), 'Хорошая комплектация.')
+    || preg_match('/[\x{1F000}-\x{1FAFF}]|2022\.10|пробег|Стоимость автомобиля|Китайская экспортная компания/ui', (string) ($cleanDescription['description'] ?? '')) === 1) {
+    fwrite(STDERR, 'FAIL clean description/month normalization: ' . json_encode([
+        'year_detail' => $cleanDescription['year_detail'] ?? null,
+        'description' => $cleanDescription['description'] ?? null,
+    ], JSON_UNESCAPED_UNICODE) . PHP_EOL);
     exit(1);
 }
 $multilinePrice = TelegramCarPostParser::parse(
