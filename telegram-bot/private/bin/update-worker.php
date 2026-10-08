@@ -99,7 +99,8 @@ while (true) {
                 file_put_contents($metaPath, $retryMeta, LOCK_EX);
                 @chmod($metaPath, 0600);
                 @rename($processingPath, $queuePath);
-                usleep(min(30, 2 ** $attempts) * 1_000_000);
+                // Respect retry_at on the next scan without blocking unrelated
+                // incoming updates behind a transient Telegram/API error.
             }
         }
     }

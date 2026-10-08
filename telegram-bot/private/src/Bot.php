@@ -590,7 +590,7 @@ final class Bot
 
         if (!$this->isAllowed($userId) || $chatId === 0) {
             if ($callbackId !== '') {
-                $this->telegram->answerCallbackQuery($callbackId, 'Нет доступа.');
+                $this->answerCallbackSafely($callbackId, 'Нет доступа.');
             }
             return;
         }
@@ -603,37 +603,33 @@ final class Bot
             $draft['price_rub'] = null;
             $missing = TelegramCarPostParser::missing($draft);
             $this->database->saveSession($userId, $chatId, 'import_missing', $draft);
-            $this->telegram->answerCallbackQuery($callbackId, 'Цена отмечена как «по запросу».');
+            $this->answerCallbackSafely($callbackId, 'Цена отмечена как «по запросу».');
             if ($missing === []) $this->prepareForwardPreview($chatId, $userId);
             else $this->sendMissingFieldsOnce($chatId, $userId, $draft, $missing);
             return;
         }
         if ($action === 'preview_import' && $session !== null
             && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
-            try {
-                $this->telegram->answerCallbackQuery($callbackId, 'Готовлю предпросмотр.');
-            } catch (Throwable $exception) {
-                // Expired callback acknowledgements must not cancel the action.
-                TelegramClient::logPerformance('callback_ack_error', [
-                    'action' => 'preview_import',
-                    'error_class' => get_class($exception),
-                ]);
-            }
+            $this->answerCallbackSafely($callbackId, 'Готовлю предпросмотр.');
             $this->prepareForwardPreview($chatId, $userId);
+            return;
+        }
+        if ($action === 'preview_import' && ($session['step'] ?? '') === 'confirm') {
+            $this->answerCallbackSafely($callbackId, 'Предпросмотр уже готов. Используйте кнопки под последним сообщением.');
             return;
         }
         if ($action === 'cancel_publish' && $session !== null
             && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing', 'confirm', 'import_processing'], true)) {
             $this->discardDraftPhotos($session['draft'] ?? []);
             $this->database->deleteSession($userId);
-            $this->telegram->answerCallbackQuery($callbackId, 'Импорт отменён.');
+            $this->answerCallbackSafely($callbackId, 'Импорт отменён.');
             $this->telegram->sendMessage($chatId, 'Черновик удалён; автомобиль не опубликован.', self::homeKeyboard());
             return;
         }
         if (($session['step'] ?? '') === 'delete_confirm') {
             if ($action === 'cancel_delete') {
                 $this->database->deleteSession($userId);
-                $this->telegram->answerCallbackQuery($callbackId, 'Отменено.');
+                $this->answerCallbackSafely($callbackId, 'Отменено.');
                 $this->telegram->sendMessage($chatId, 'Удаление отменено.', self::homeKeyboard());
                 return;
             }
@@ -642,7 +638,7 @@ final class Bot
                 $id = (int) $matches[1];
                 $deleted = $this->database->deleteCar($id, (string) $this->config['app']['media_dir']);
                 $this->database->deleteSession($userId);
-                $this->telegram->answerCallbackQuery($callbackId, $deleted ? 'Удалено.' : 'Уже удалено.');
+                $this->answerCallbackSafely($callbackId, $deleted ? 'Удалено.' : 'Уже удалено.');
                 $this->telegram->sendMessage(
                     $chatId,
                     $deleted ? "Карточка #{$id} удалена." : "Карточка #{$id} уже отсутствует.",
@@ -652,39 +648,35 @@ final class Bot
             }
         }
         if ($session === null || ($session['step'] ?? '') !== 'confirm') {
-            $this->telegram->answerCallbackQuery($callbackId, 'Черновик уже обработан.');
+            $this->answerCallbackSafely($callbackId, 'Черновик уже обработан.');
             return;
         }
 
         if ($action === 'cancel_publish') {
             $this->discardDraftPhotos($session['draft'] ?? []);
             $this->database->deleteSession($userId);
-            $this->telegram->answerCallbackQuery($callbackId, 'Отменено.');
+            $this->answerCallbackSafely($callbackId, 'Отменено.');
             $this->telegram->sendMessage($chatId, 'Карточка не опубликована.', self::homeKeyboard());
             return;
         }
 
         if ($action !== 'publish_car') {
-            $this->telegram->answerCallbackQuery($callbackId, 'Неизвестное действие.');
+            $this->answerCallbackSafely($callbackId, 'Неизвестное действие.');
             return;
         }
 
         if ((int) ($session['draft']['publish_retry_after'] ?? 0) > time()) {
-            $this->telegram->answerCallbackQuery($callbackId, 'Повторите публикацию чуть позже.');
+            $this->answerCallbackSafely($callbackId, 'Повторите публикацию чуть позже.');
             return;
         }
 
         $claimed = $this->database->claimSessionStep($userId, ['confirm'], 'publishing');
         if ($claimed === null) {
-            $this->telegram->answerCallbackQuery($callbackId, 'Публикация уже обрабатывается.');
+            $this->answerCallbackSafely($callbackId, 'Публикация уже обрабатывается.');
             return;
         }
         $draft = $claimed['draft'];
-        try {
-            $this->telegram->answerCallbackQuery($callbackId, 'Сохраняю автомобиль и фотографии.');
-        } catch (Throwable $exception) {
-            // An expired callback must not prevent the already-confirmed action.
-        }
+        $this->answerCallbackSafely($callbackId, 'Сохраняю автомобиль и фотографии.');
         try {
             $photoCount = count(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
             $readyPhotoCount = count(array_filter(
@@ -692,6 +684,7 @@ final class Bot
                 static fn ($path): bool => is_string($path) && is_file($path)
             ));
             if ($readyPhotoCount < $photoCount && $photoCount > 0) {
+                $this->telegram->sendMessage($chatId, 'Подтверждение получено. Сохраняю автомобиль и загружаю ' . $photoCount . ' фотографий…');
                 $this->downloadForwardPhotos($userId, $chatId, $draft);
             }
             $result = $this->database->publishCar(
@@ -713,6 +706,20 @@ final class Bot
                 'photo_count' => count($draft['photo_file_ids'] ?? []),
             ]);
             $this->telegram->sendMessage($chatId, 'Не удалось сохранить автомобиль. Черновик и уже загруженные фотографии сохранены; нажмите «Опубликовать» ещё раз позже.');
+        }
+    }
+
+    private function answerCallbackSafely(string $callbackId, string $text): void
+    {
+        if ($callbackId === '') return;
+        try {
+            $this->telegram->answerCallbackQuery($callbackId, $text);
+        } catch (Throwable $exception) {
+            // Stale callback acknowledgements must not block the selected action
+            // or make the durable queue retry an already handled update.
+            TelegramClient::logPerformance('callback_ack_error', [
+                'error_class' => get_class($exception),
+            ]);
         }
     }
 
