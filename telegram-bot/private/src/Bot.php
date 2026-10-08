@@ -610,7 +610,15 @@ final class Bot
         }
         if ($action === 'preview_import' && $session !== null
             && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
-            $this->telegram->answerCallbackQuery($callbackId, 'Проверяю данные и фотографии.');
+            try {
+                $this->telegram->answerCallbackQuery($callbackId, 'Готовлю предпросмотр.');
+            } catch (Throwable $exception) {
+                // Expired callback acknowledgements must not cancel the action.
+                TelegramClient::logPerformance('callback_ack_error', [
+                    'action' => 'preview_import',
+                    'error_class' => get_class($exception),
+                ]);
+            }
             $this->prepareForwardPreview($chatId, $userId);
             return;
         }
@@ -782,7 +790,10 @@ final class Bot
             . 'Город: ' . $this->escape((string) ($draft['city'] ?? 'не указан')) . "\n"
             . 'Цена: ' . (!empty($draft['price_on_request']) ? 'по запросу' : $price) . "\n"
             . 'Статус: ' . $this->escape((string) $draft['status']) . "\n"
-            . 'Фотографий: ' . count($draft['images'] ?? [])
+            . 'Фотографий: ' . max(
+                count($draft['images'] ?? []),
+                count($draft['preview_file_ids'] ?? [])
+            )
             . "\n\nПроверьте данные. После публикации карточка попадёт в базу каталога.";
 
         if (!empty($draft['description'])) {
