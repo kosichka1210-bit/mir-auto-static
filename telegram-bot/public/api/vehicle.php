@@ -13,15 +13,6 @@ if (!preg_match('/^[a-z0-9-]{1,150}$/', $slug)) {
     exit;
 }
 
-$publicRoot = dirname(__DIR__);
-$staticPage = $publicRoot . '/avtomobili/' . $slug . '/index.html';
-if (is_file($staticPage)) {
-    header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: no-cache, must-revalidate');
-    readfile($staticPage);
-    exit;
-}
-
 header('Content-Type: text/html; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
 header('Cache-Control: no-cache, must-revalidate');
@@ -38,7 +29,7 @@ try {
     $database = new Database($config['database']);
     $statement = $database->pdo()->prepare(
         'SELECT id, slug, brand, model, title, year, year_detail, mileage_km, engine, power, transmission,
-                drivetrain, trim_name, price_rub, price_location, city, status, description
+                drivetrain, trim_name, price_rub, price_location, status, description
          FROM cars WHERE slug = :slug AND published_at IS NOT NULL LIMIT 1'
     );
     $statement->execute(['slug' => $slug]);
@@ -120,7 +111,6 @@ $specs = [
     'Коробка передач' => (string) ($car['transmission'] ?? ''),
     'Привод' => (string) ($car['drivetrain'] ?? ''),
     'Комплектация' => (string) ($car['trim_name'] ?? ''),
-    'Город' => (string) ($car['city'] ?? ''),
 ];
 $specHtml = '';
 foreach ($specs as $label => $value) {
@@ -155,7 +145,7 @@ if ($images === []) {
 <meta name="description" content="<?= $escape($description) ?>">
 <link rel="canonical" href="<?= $escape($canonical) ?>">
 <meta property="og:type" content="website"><meta property="og:site_name" content="MIR AUTO"><meta property="og:title" content="<?= $escape($title) ?> — MIR AUTO"><meta property="og:description" content="<?= $escape($description) ?>"><meta property="og:url" content="<?= $escape($canonical) ?>"><meta property="og:image" content="<?= $escape($image) ?>"><meta property="og:image:alt" content="<?= $escape($title) ?> — фотографии автомобиля"><meta property="og:locale" content="ru_RU"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=26"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
+<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=28"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
 <script type="application/ld+json"><?= $jsonLd ?></script>
 </head>
 <body>
@@ -164,5 +154,6 @@ if ($images === []) {
 <footer class="compact-footer"><div class="shell compact-footer-inner"><a class="footer-logo text-brand" href="/" aria-label="MIR AUTO — на главную"><span class="brand-avatar"><img src="/images/mir-auto-logo.jpg" alt="Логотип MIR AUTO"></span><span class="brand-words"><b>MIR AUTO</b><small>Автомобили из Китая</small></span></a><p class="footer-copy">© 2026 MIR AUTO</p></div></footer>
 <?php if (count($images) > 1): ?><script>
 (() => { const root=document.querySelector('.vehicle-gallery');const main=root?.querySelector('.vehicle-gallery-main');const thumbs=[...root.querySelectorAll('.gallery-thumb')];if(!main||thumbs.length<2)return;let current=0;const show=(n)=>{current=(n+thumbs.length)%thumbs.length;main.src=thumbs[current].querySelector('img').src;main.alt=<?= json_encode($title, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>+' — фото '+(current+1)+' — MIR AUTO';thumbs.forEach((item,index)=>item.classList.toggle('is-active',index===current));};root.querySelector('.gallery-prev').addEventListener('click',()=>show(current-1));root.querySelector('.gallery-next').addEventListener('click',()=>show(current+1));thumbs.forEach((item,index)=>item.addEventListener('click',()=>show(index)));})();
+(() => { const root=document.querySelector('.vehicle-gallery');const main=root?.querySelector('.vehicle-gallery-main');const thumbs=[...root.querySelectorAll('.gallery-thumb')];const stage=root?.querySelector('.vehicle-gallery-stage');if(!main||!stage)return;main.addEventListener('error',()=>{main.hidden=true;stage.classList.add('is-missing');});thumbs.forEach(item=>item.querySelector('img')?.addEventListener('error',()=>{item.hidden=true;}));if(thumbs.length<2)return;let current=0;const show=(n)=>{current=(n+thumbs.length)%thumbs.length;main.hidden=false;stage.classList.remove('is-missing');main.src=thumbs[current].querySelector('img').src;main.alt=<?= json_encode($title, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>+' — фото '+(current+1)+' — MIR AUTO';thumbs.forEach((item,index)=>item.classList.toggle('is-active',index===current));};root.querySelector('.gallery-prev').addEventListener('click',()=>show(current-1));root.querySelector('.gallery-next').addEventListener('click',()=>show(current+1));thumbs.forEach((item,index)=>item.addEventListener('click',()=>show(index)));let startX=0;main.addEventListener('touchstart',event=>{startX=event.changedTouches[0].screenX;},{passive:true});main.addEventListener('touchend',event=>{const dx=event.changedTouches[0].screenX-startX;if(Math.abs(dx)>40)show(current+(dx<0?1:-1));},{passive:true});})();
 </script><?php endif; ?>
 </body></html>
