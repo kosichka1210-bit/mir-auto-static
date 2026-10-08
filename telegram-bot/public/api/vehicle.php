@@ -69,8 +69,11 @@ try {
 $title = trim((string) ($car['title'] ?: $car['brand'] . ' ' . $car['model']));
 $canonical = $baseUrl . '/avtomobili/' . rawurlencode($slug) . '/';
 $description = trim(preg_replace('/\s+/u', ' ', strip_tags((string) ($car['description'] ?? ''))) ?? '');
+$descriptionLead = 'Автомобиль из опубликованного предложения MIR AUTO.';
 if ($description === '') {
-    $description = $title . ' из опубликованного предложения MIR AUTO. Уточняйте актуальность, наличие и условия заказа у представителей.';
+    $description = $descriptionLead . ' Представители MIR AUTO проконсультируют по автомобилю и дальнейшему процессу.';
+} elseif (preg_match('/^Автомобиль из опубликованного предложения MIR AUTO\./u', $description) !== 1) {
+    $description = $descriptionLead . ' ' . $description;
 }
 $description = mb_substr($description, 0, 260);
 $image = $images[0] ?? ($baseUrl . '/og.png');
