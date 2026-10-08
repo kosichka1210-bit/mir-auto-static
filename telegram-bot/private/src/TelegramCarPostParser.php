@@ -87,7 +87,7 @@ final class TelegramCarPostParser
             $number = self::number($match[1]);
             if ($number > 0) $draft['mileage_km'] ??= $number;
         }
-        if (preg_match('/(?:цена|стоимость)[^\n]{0,160}(?:[:：]\s*)?\s*\n?\s*([0-9][0-9\s.,]*)/ui', $text, $match) === 1) {
+        if (preg_match('/(?:цена|стоимость)[^\n]{0,160}?[:：-]?\s*([0-9][0-9\s.,]*)/ui', $text, $match) === 1) {
             self::setPrice($draft, $match[1]);
         } elseif (preg_match('/цена\s+по\s+запросу|по\s+запросу/ui', $text) === 1) {
             $draft['price_on_request'] = true;
