@@ -187,6 +187,7 @@ final class TelegramClient
                 ['command' => 'edit', 'description' => 'Изменить автомобиль'],
                 ['command' => 'sold', 'description' => 'Отметить проданной'],
                 ['command' => 'delete', 'description' => 'Удалить автомобиль'],
+                ['command' => 'publish', 'description' => 'Подтвердить публикацию'],
                 ['command' => 'cancel', 'description' => 'Отменить черновик'],
                 ['command' => 'help', 'description' => 'Помощь'],
             ], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR),

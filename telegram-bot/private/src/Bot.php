@@ -98,6 +98,16 @@ final class Bot
             return;
         }
 
+        if ($command === '/publish') {
+            $session = $this->database->getSession($userId);
+            if ($session === null || ($session['step'] ?? '') !== 'confirm') {
+                $this->telegram->sendMessage($chatId, 'Нет готового предпросмотра для публикации. Сначала перешлите пост и дождитесь предпросмотра.');
+                return;
+            }
+            $this->publishConfirmedDraft($chatId, $userId, $session, null);
+            return;
+        }
+
         $session = $this->database->getSession($userId);
         $forwarded = $this->isForwardedMessage($message);
         $sessionStep = (string) ($session['step'] ?? '');
@@ -665,18 +675,33 @@ final class Bot
             return;
         }
 
+        $this->publishConfirmedDraft($chatId, $userId, $session, $callbackId);
+    }
+
+    private function publishConfirmedDraft(int $chatId, int $userId, array $session, ?string $callbackId): void
+    {
         if ((int) ($session['draft']['publish_retry_after'] ?? 0) > time()) {
-            $this->answerCallbackSafely($callbackId, 'Повторите публикацию чуть позже.');
+            if ($callbackId !== null) {
+                $this->answerCallbackSafely($callbackId, 'Повторите публикацию чуть позже.');
+            } else {
+                $this->telegram->sendMessage($chatId, 'Повторите /publish чуть позже.');
+            }
             return;
         }
 
         $claimed = $this->database->claimSessionStep($userId, ['confirm'], 'publishing');
         if ($claimed === null) {
-            $this->answerCallbackSafely($callbackId, 'Публикация уже обрабатывается.');
+            if ($callbackId !== null) {
+                $this->answerCallbackSafely($callbackId, 'Публикация уже обрабатывается.');
+            }
             return;
         }
         $draft = $claimed['draft'];
-        $this->answerCallbackSafely($callbackId, 'Сохраняю автомобиль и фотографии.');
+        if ($callbackId !== null) {
+            $this->answerCallbackSafely($callbackId, 'Сохраняю автомобиль и фотографии.');
+        } else {
+            $this->telegram->sendMessage($chatId, 'Подтверждение получено. Сохраняю автомобиль и фотографии…');
+        }
         try {
             $photoCount = count(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
             $readyPhotoCount = count(array_filter(
@@ -705,7 +730,7 @@ final class Bot
                 'error_class' => get_class($exception),
                 'photo_count' => count($draft['photo_file_ids'] ?? []),
             ]);
-            $this->telegram->sendMessage($chatId, 'Не удалось сохранить автомобиль. Черновик и уже загруженные фотографии сохранены; нажмите «Опубликовать» ещё раз позже.');
+            $this->telegram->sendMessage($chatId, 'Не удалось сохранить автомобиль. Черновик и уже загруженные фотографии сохранены; попробуйте /publish ещё раз позже.');
         }
     }
 
