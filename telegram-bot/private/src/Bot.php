@@ -102,6 +102,29 @@ final class Bot
         $forwarded = $this->isForwardedMessage($message);
         $sessionStep = (string) ($session['step'] ?? '');
         $sessionDraft = is_array($session['draft'] ?? null) ? $session['draft'] : [];
+
+        // Text commands provide a fallback when Telegram clients do not deliver
+        // inline-keyboard callbacks promptly or the button cannot be tapped.
+        if ($session !== null && in_array($sessionStep, ['import_photos', 'import_missing'], true)) {
+            if ($command === '/preview') {
+                $this->prepareForwardPreview($chatId, $userId);
+                return;
+            }
+
+            if ($command === '/price_request' || mb_strtolower($text) === 'цена по запросу') {
+                $sessionDraft['price_on_request'] = true;
+                $sessionDraft['price_rub'] = null;
+                $this->database->saveSession($userId, $chatId, 'import_missing', $sessionDraft);
+                $missing = TelegramCarPostParser::missing($sessionDraft);
+                if ($missing === []) {
+                    $this->prepareForwardPreview($chatId, $userId);
+                } else {
+                    $this->sendMissingFieldsOnce($chatId, $userId, $sessionDraft, $missing);
+                }
+                return;
+            }
+        }
+
         $emptyInitialDraft = $sessionStep === 'brand'
             && empty($sessionDraft['brand'])
             && empty($sessionDraft['images']);
