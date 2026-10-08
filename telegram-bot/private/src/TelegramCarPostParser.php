@@ -87,7 +87,7 @@ final class TelegramCarPostParser
             $number = self::number($match[1]);
             if ($number > 0) $draft['mileage_km'] ??= $number;
         }
-        if (preg_match('/(?:цена|стоимость|цена\s+автомобиля)\s*[:：-]?\s*([^\n]{1,100})/ui', $text, $match) === 1) {
+        if (preg_match('/(?:цена|стоимость)[^\n]{0,160}(?:[:：]\s*)?\s*\n?\s*([0-9][0-9\s.,]*)/ui', $text, $match) === 1) {
             self::setPrice($draft, $match[1]);
         } elseif (preg_match('/цена\s+по\s+запросу|по\s+запросу/ui', $text) === 1) {
             $draft['price_on_request'] = true;
@@ -121,10 +121,20 @@ final class TelegramCarPostParser
                 if (preg_match($pattern, $text) === 1) { $draft['transmission'] = $label; break; }
             }
         }
-        if (empty($draft['city']) && preg_match('/(?:город|локация|цена\s+во)\s*[:：-]?\s*(Владивосток|Москва|Санкт-Петербург|СПб|Новосибирск|Иркутск|Красноярск)/ui', $text, $match) === 1) {
-            $draft['city'] = mb_convert_case($match[1], MB_CASE_TITLE, 'UTF-8');
-        } elseif (empty($draft['city']) && preg_match('/\b(Владивосток|Санкт-Петербург|Новосибирск|Иркутск|Красноярск)\b/ui', $text, $match) === 1) {
-            $draft['city'] = $match[1];
+        if (empty($draft['city'])) {
+            foreach ([
+                'Владивосток' => '/\bВладивосток(?:е|а)?\b/ui',
+                'Москва' => '/\bМоскв(?:а|е|у|ы)\b/ui',
+                'Санкт-Петербург' => '/\bСанкт-Петербург(?:е|а)?\b/ui',
+                'Новосибирск' => '/\bНовосибирск(?:е|а)?\b/ui',
+                'Иркутск' => '/\bИркутск(?:е|а)?\b/ui',
+                'Красноярск' => '/\bКрасноярск(?:е|а)?\b/ui',
+            ] as $city => $pattern) {
+                if (preg_match($pattern, $text) === 1) {
+                    $draft['city'] = $city;
+                    break;
+                }
+            }
         }
         $draft['price_location'] = $draft['city'] ?? null;
         $draft['title'] ??= trim(implode(' ', array_filter([$draft['brand'] ?? null, $draft['model'] ?? null, $draft['trim_name'] ?? null])));

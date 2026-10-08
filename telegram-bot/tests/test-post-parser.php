@@ -22,6 +22,16 @@ if (($parsed['trim_name'] ?? '') !== 'Champion Edition') {
     fwrite(STDERR, 'FAIL trim_name: ' . var_export($parsed['trim_name'] ?? null, true) . PHP_EOL);
     exit(1);
 }
+$multilinePrice = TelegramCarPostParser::parse(
+    "GAC Trumpchi GS8\n2022.10\nСтоимость автомобиля, под ключ в г. Владивостоке:\n1.380.000 ₽ по актуальному курсу"
+);
+if (($multilinePrice['price_rub'] ?? null) !== 1380000 || ($multilinePrice['city'] ?? null) !== 'Владивосток') {
+    fwrite(STDERR, 'FAIL multiline price/city: ' . json_encode([
+        'price' => $multilinePrice['price_rub'] ?? null,
+        'city' => $multilinePrice['city'] ?? null,
+    ], JSON_UNESCAPED_UNICODE) . PHP_EOL);
+    exit(1);
+}
 foreach (['1.425.000', '1 425 000', '1425000'] as $price) {
     $variant = TelegramCarPostParser::parse("Haval H6\n2022.06\nЦена: {$price}");
     if (($variant['price_rub'] ?? null) !== 1425000) {
