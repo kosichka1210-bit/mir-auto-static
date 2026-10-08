@@ -17,14 +17,14 @@ $publicRoot = dirname(__DIR__);
 $staticPage = $publicRoot . '/avtomobili/' . $slug . '/index.html';
 if (is_file($staticPage)) {
     header('Content-Type: text/html; charset=utf-8');
-    header('Cache-Control: public, max-age=300');
+    header('Cache-Control: no-cache, must-revalidate');
     readfile($staticPage);
     exit;
 }
 
 header('Content-Type: text/html; charset=utf-8');
 header('X-Content-Type-Options: nosniff');
-header('Cache-Control: public, max-age=60, stale-while-revalidate=60');
+header('Cache-Control: no-cache, must-revalidate');
 
 $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 $notFound = static function () use ($escape): never {
@@ -155,7 +155,7 @@ if ($images === []) {
 <meta name="description" content="<?= $escape($description) ?>">
 <link rel="canonical" href="<?= $escape($canonical) ?>">
 <meta property="og:type" content="website"><meta property="og:site_name" content="MIR AUTO"><meta property="og:title" content="<?= $escape($title) ?> — MIR AUTO"><meta property="og:description" content="<?= $escape($description) ?>"><meta property="og:url" content="<?= $escape($canonical) ?>"><meta property="og:image" content="<?= $escape($image) ?>"><meta property="og:image:alt" content="<?= $escape($title) ?> — фотографии автомобиля"><meta property="og:locale" content="ru_RU"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=25"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
+<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=26"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
 <script type="application/ld+json"><?= $jsonLd ?></script>
 </head>
 <body>
