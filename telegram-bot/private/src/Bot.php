@@ -100,7 +100,21 @@ final class Bot
 
         $session = $this->database->getSession($userId);
         $forwarded = $this->isForwardedMessage($message);
-        if ($session === null && $forwarded && ($text !== '' || !empty($message['photo']))) {
+        $sessionStep = (string) ($session['step'] ?? '');
+        $sessionDraft = is_array($session['draft'] ?? null) ? $session['draft'] : [];
+        $emptyInitialDraft = $sessionStep === 'brand'
+            && empty($sessionDraft['brand'])
+            && empty($sessionDraft['images']);
+
+        // A forwarded channel post must take precedence over an abandoned, empty
+        // manual /addcar form. Otherwise its caption/photos are mistaken for the
+        // first manually-entered field and an album never starts an import draft.
+        if ($forwarded && ($text !== '' || !empty($message['photo']))
+            && ($session === null || $emptyInitialDraft)
+        ) {
+            if ($emptyInitialDraft) {
+                $this->database->deleteSession($userId);
+            }
             $result = $this->database->appendForwardedPost(
                 $userId,
                 $chatId,
