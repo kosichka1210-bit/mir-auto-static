@@ -542,26 +542,25 @@ final class Bot
         $claimed = $this->database->claimSessionStep($userId, ['import_photos', 'import_missing'], 'import_processing');
         if ($claimed === null) return;
         $draft = $claimed['draft'];
-        $draftsDir = rtrim((string) $this->config['app']['drafts_dir'], '/\\');
-        $images = [];
         try {
-            foreach (array_slice(array_values(array_unique(array_map('strval', $draft['photo_file_ids'] ?? []))), 0, 10) as $index => $fileId) {
-                $target = $draftsDir . DIRECTORY_SEPARATOR . $userId . DIRECTORY_SEPARATOR
-                    . sprintf('import-%02d-%s.jpg', $index + 1, bin2hex(random_bytes(4)));
-                $this->telegram->downloadPhoto($fileId, $target);
-                $images[] = $target;
-            }
-            $draft['images'] = $images;
             $draft['preview_file_ids'] = array_values(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
+            // Telegram can render the forwarded file IDs directly. Do not make
+            // the user wait for N getFile/download requests just to review a draft.
+            $draft['images'] = array_values(array_filter(
+                (array) ($draft['images'] ?? []),
+                static fn ($path): bool => is_string($path) && is_file($path)
+            ));
             $draft['status'] = in_array(($draft['status'] ?? ''), ['В наличии', 'Под заказ', 'Продано'], true)
                 ? $draft['status'] : 'В наличии';
             $this->database->saveSession($userId, $chatId, 'confirm', $draft);
             $this->showPreview($chatId, $draft);
         } catch (Throwable $exception) {
-            $this->discardDraftPhotos(['images' => $images]);
-            $draft['images'] = [];
             $this->database->saveSession($userId, $chatId, 'import_photos', $draft);
-            $this->telegram->sendMessage($chatId, 'Не удалось подготовить одну из фотографий. Черновик сохранён; попробуйте ещё раз нажать «Проверить и показать предпросмотр».');
+            TelegramClient::logPerformance('import_preview_error', [
+                'error_class' => get_class($exception),
+                'photo_count' => count($draft['preview_file_ids'] ?? []),
+            ]);
+            $this->telegram->sendMessage($chatId, 'Не удалось показать предпросмотр в Telegram. Черновик сохранён; попробуйте ещё раз нажать кнопку.');
         }
     }
 
@@ -662,18 +661,104 @@ final class Bot
             return;
         }
 
-        $result = $this->database->publishCar(
-            $session['draft'],
-            $userId,
-            (string) $this->config['app']['media_dir']
-        );
-        $this->database->deleteSession($userId);
-        $this->telegram->answerCallbackQuery($callbackId, 'Опубликовано.');
-        $this->telegram->sendMessage(
-            $chatId,
-            '<b>Автомобиль опубликован.</b>\nID: ' . $result['id'] . '\nАдрес карточки: <code>' . htmlspecialchars($result['slug']) . '</code>',
-            self::homeKeyboard()
-        );
+        if ((int) ($session['draft']['publish_retry_after'] ?? 0) > time()) {
+            $this->telegram->answerCallbackQuery($callbackId, 'Повторите публикацию чуть позже.');
+            return;
+        }
+
+        $claimed = $this->database->claimSessionStep($userId, ['confirm'], 'publishing');
+        if ($claimed === null) {
+            $this->telegram->answerCallbackQuery($callbackId, 'Публикация уже обрабатывается.');
+            return;
+        }
+        $draft = $claimed['draft'];
+        try {
+            $this->telegram->answerCallbackQuery($callbackId, 'Сохраняю автомобиль и фотографии.');
+        } catch (Throwable $exception) {
+            // An expired callback must not prevent the already-confirmed action.
+        }
+        try {
+            $photoCount = count(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
+            $readyPhotoCount = count(array_filter(
+                (array) ($draft['images'] ?? []),
+                static fn ($path): bool => is_string($path) && is_file($path)
+            ));
+            if ($readyPhotoCount < $photoCount && $photoCount > 0) {
+                $this->downloadForwardPhotos($userId, $chatId, $draft);
+            }
+            $result = $this->database->publishCar(
+                $draft,
+                $userId,
+                (string) $this->config['app']['media_dir']
+            );
+            $this->database->deleteSession($userId);
+            $this->telegram->sendMessage(
+                $chatId,
+                '<b>Автомобиль опубликован.</b>\nID: ' . $result['id'] . '\nАдрес карточки: <code>' . htmlspecialchars($result['slug']) . '</code>',
+                self::homeKeyboard()
+            );
+        } catch (Throwable $exception) {
+            $draft['publish_retry_after'] = time() + 15;
+            $this->database->saveSession($userId, $chatId, 'confirm', $draft);
+            TelegramClient::logPerformance('car_publish_error', [
+                'error_class' => get_class($exception),
+                'photo_count' => count($draft['photo_file_ids'] ?? []),
+            ]);
+            $this->telegram->sendMessage($chatId, 'Не удалось сохранить автомобиль. Черновик и уже загруженные фотографии сохранены; нажмите «Опубликовать» ещё раз позже.');
+        }
+    }
+
+    /** Download forwarded photos only after the user confirms publication. */
+    private function downloadForwardPhotos(int $userId, int $chatId, array &$draft): void
+    {
+        $fileIds = array_slice(array_values(array_unique(array_map('strval', $draft['photo_file_ids'] ?? []))), 0, 10);
+        $downloaded = is_array($draft['downloaded_photo_paths'] ?? null)
+            ? $draft['downloaded_photo_paths'] : [];
+        $draftsDir = rtrim((string) $this->config['app']['drafts_dir'], '/\\');
+        $started = hrtime(true);
+
+        foreach ($fileIds as $index => $fileId) {
+            $existing = $downloaded[$fileId] ?? null;
+            if (is_string($existing) && is_file($existing)) continue;
+            unset($downloaded[$fileId]);
+
+            $target = $draftsDir . DIRECTORY_SEPARATOR . $userId . DIRECTORY_SEPARATOR
+                . sprintf('import-%02d-%s.jpg', $index + 1, bin2hex(random_bytes(4)));
+            try {
+                $this->telegram->downloadPhoto($fileId, $target);
+            } catch (Throwable $exception) {
+                @unlink($target);
+                $draft['downloaded_photo_paths'] = $downloaded;
+                $draft['images'] = array_values(array_filter(
+                    array_map(static fn (string $id) => $downloaded[$id] ?? null, $fileIds),
+                    static fn ($path): bool => is_string($path) && is_file($path)
+                ));
+                $this->database->saveSession($userId, $chatId, 'publishing', $draft);
+                TelegramClient::logPerformance('photo_prepare_error', [
+                    'photo_index' => $index + 1,
+                    'photo_count' => count($fileIds),
+                    'error_class' => get_class($exception),
+                    'elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+                ]);
+                throw $exception;
+            }
+
+            $downloaded[$fileId] = $target;
+            $draft['downloaded_photo_paths'] = $downloaded;
+            $draft['images'] = array_values(array_filter(
+                array_map(static fn (string $id) => $downloaded[$id] ?? null, $fileIds),
+                static fn ($path): bool => is_string($path) && is_file($path)
+            ));
+            // Persist each completed photo so a transient failure retries only
+            // the missing image instead of downloading the whole album again.
+            $this->database->saveSession($userId, $chatId, 'publishing', $draft);
+        }
+
+        TelegramClient::logPerformance('photo_prepare', [
+            'photo_count' => count($fileIds),
+            'elapsed_ms' => round((hrtime(true) - $started) / 1_000_000, 2),
+        ]);
+        unset($draft['publish_retry_after']);
     }
 
     private function showPreview(int $chatId, array $draft): void
