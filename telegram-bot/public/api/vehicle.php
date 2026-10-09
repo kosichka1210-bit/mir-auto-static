@@ -60,13 +60,12 @@ try {
 $title = trim((string) ($car['title'] ?: $car['brand'] . ' ' . $car['model']));
 $canonical = $baseUrl . '/avtomobili/' . rawurlencode($slug) . '/';
 $description = trim(preg_replace('/\s+/u', ' ', strip_tags((string) ($car['description'] ?? ''))) ?? '');
-$descriptionLead = 'Автомобиль из опубликованного предложения MIR AUTO.';
-if ($description === '') {
-    $description = $descriptionLead . ' Представители MIR AUTO проконсультируют по автомобилю и дальнейшему процессу.';
-} elseif (preg_match('/^Автомобиль из опубликованного предложения MIR AUTO\./u', $description) !== 1) {
-    $description = $descriptionLead . ' ' . $description;
-}
-$description = mb_substr($description, 0, 260);
+$description = preg_replace('/^Автомобиль из опубликованного предложения MIR AUTO\.?\s*/ui', '', $description) ?? $description;
+$description = preg_replace('/^(?:хорошая|отличная)\s+комплектация\s*[:.\-–—]?\s*/ui', '', $description) ?? $description;
+$description = trim(mb_substr($description, 0, 1200));
+$metaDescription = $description !== ''
+    ? mb_substr($description, 0, 260)
+    : $title . ' — характеристики и фотографии в каталоге MIR AUTO.';
 $image = $images[0] ?? ($baseUrl . '/og.png');
 $price = $car['price_rub'] !== null ? (int) $car['price_rub'] : null;
 $schema = [
@@ -74,7 +73,7 @@ $schema = [
     '@type' => 'Car',
     'name' => $title,
     'url' => $canonical,
-    'description' => $description,
+    'description' => $metaDescription,
     'image' => $images,
     'brand' => ['@type' => 'Brand', 'name' => (string) $car['brand']],
     'model' => (string) $car['model'],
@@ -142,15 +141,15 @@ if ($images === []) {
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title><?= $escape($title) ?> из Китая — MIR AUTO</title>
-<meta name="description" content="<?= $escape($description) ?>">
+<meta name="description" content="<?= $escape($metaDescription) ?>">
 <link rel="canonical" href="<?= $escape($canonical) ?>">
-<meta property="og:type" content="website"><meta property="og:site_name" content="MIR AUTO"><meta property="og:title" content="<?= $escape($title) ?> — MIR AUTO"><meta property="og:description" content="<?= $escape($description) ?>"><meta property="og:url" content="<?= $escape($canonical) ?>"><meta property="og:image" content="<?= $escape($image) ?>"><meta property="og:image:alt" content="<?= $escape($title) ?> — фотографии автомобиля"><meta property="og:locale" content="ru_RU"><meta name="twitter:card" content="summary_large_image">
-<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=28"><link rel="stylesheet" href="/vehicle-gallery.css?v=2">
+<meta property="og:type" content="website"><meta property="og:site_name" content="MIR AUTO"><meta property="og:title" content="<?= $escape($title) ?> — MIR AUTO"><meta property="og:description" content="<?= $escape($metaDescription) ?>"><meta property="og:url" content="<?= $escape($canonical) ?>"><meta property="og:image" content="<?= $escape($image) ?>"><meta property="og:image:alt" content="<?= $escape($title) ?> — фотографии автомобиля"><meta property="og:locale" content="ru_RU"><meta name="twitter:card" content="summary_large_image">
+<link rel="icon" href="/favicon.svg"><link rel="stylesheet" href="/style.css?v=21"><link rel="stylesheet" href="/layout-fixes.css?v=28"><link rel="stylesheet" href="/vehicle-gallery.css?v=3">
 <script type="application/ld+json"><?= $jsonLd ?></script>
 </head>
 <body>
 <header class="site-header catalog-header"><a class="brand-mark text-brand" href="/" aria-label="MIR AUTO — на главную"><span class="brand-avatar"><img src="/images/mir-auto-logo.jpg" alt="Логотип MIR AUTO"></span><span class="brand-words"><b>MIR AUTO</b><small>Автомобили из Китая</small></span></a><nav class="main-nav" aria-label="Основная навигация"><a href="/">Главная</a><a href="/avtomobili/">Автомобили</a><a href="/#process">Как мы работаем</a><a href="/#form">Контакты</a></nav><a class="button button-small desktop-action" href="/#form">Подобрать автомобиль</a><details class="mobile-menu"><summary aria-label="Открыть меню"><i></i><i></i></summary><nav><a href="/avtomobili/">Автомобили</a><a href="/#process">Как мы работаем</a><a href="/#form">Контакты</a><a class="button" href="/#form">Подобрать автомобиль</a></nav></details></header>
-<main class="vehicle shell"><a class="back" href="/avtomobili/">← Все автомобили</a><div class="vehicle-grid"><?= $gallery ?><section class="vehicle-details"><p class="status"><?= $escape((string) $car['status']) ?></p><h1><?= $escape($title) ?></h1><?php if ($price !== null && $price > 0): ?><p class="vehicle-price"><?= number_format($price, 0, ',', ' ') ?> ₽</p><?php else: ?><p class="vehicle-price">Цена по запросу</p><?php endif; ?><?php if (!empty($car['price_location'])): ?><p class="vehicle-note">Опубликованная стоимость для <?= $escape((string) $car['price_location']) ?>. Уточняйте актуальность.</p><?php endif; ?><?php if ($specHtml !== ''): ?><dl class="spec-list"><?= $specHtml ?></dl><?php endif; ?><?php if ($description !== ''): ?><p class="vehicle-text"><?= $escape($description) ?></p><?php endif; ?><div class="vehicle-actions"><a class="button" href="/#form">Обсудить автомобиль</a><a class="button button-outline" href="https://t.me/mirautochina125" target="_blank" rel="noopener">Написать в Telegram</a></div></section></div></main>
+<main class="vehicle shell"><a class="back" href="/avtomobili/">← Все автомобили</a><div class="vehicle-grid"><?= $gallery ?><section class="vehicle-details"><p class="status"><?= $escape((string) $car['status']) ?></p><h1><?= $escape($title) ?></h1><?php if ($price !== null && $price > 0): ?><p class="vehicle-price"><?= number_format($price, 0, ',', ' ') ?> ₽</p><?php else: ?><p class="vehicle-price">Цена по запросу</p><?php endif; ?><?php if (!empty($car['price_location'])): ?><p class="vehicle-note">Опубликованная стоимость для <?= $escape((string) $car['price_location']) ?>. Уточняйте актуальность.</p><?php endif; ?><?php if ($specHtml !== ''): ?><dl class="spec-list"><?= $specHtml ?></dl><?php endif; ?><?php if ($description !== ''): ?><section class="vehicle-description"><h2 class="vehicle-description-title">Комплектация:</h2><p class="vehicle-text"><?= $escape($description) ?></p></section><?php endif; ?><div class="vehicle-actions"><a class="button" href="/#form">Обсудить автомобиль</a><a class="button button-outline" href="https://t.me/mirautochina125" target="_blank" rel="noopener">Написать в Telegram</a></div></section></div></main>
 <footer class="compact-footer"><div class="shell compact-footer-inner"><a class="footer-logo text-brand" href="/" aria-label="MIR AUTO — на главную"><span class="brand-avatar"><img src="/images/mir-auto-logo.jpg" alt="Логотип MIR AUTO"></span><span class="brand-words"><b>MIR AUTO</b><small>Автомобили из Китая</small></span></a><p class="footer-copy">© 2026 MIR AUTO</p></div></footer>
 <?php if (count($images) > 1): ?><script>
 (() => { const root=document.querySelector('.vehicle-gallery');const main=root?.querySelector('.vehicle-gallery-main');const thumbs=[...root.querySelectorAll('.gallery-thumb')];if(!main||thumbs.length<2)return;let current=0;const show=(n)=>{current=(n+thumbs.length)%thumbs.length;main.src=thumbs[current].querySelector('img').src;main.alt=<?= json_encode($title, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>+' — фото '+(current+1)+' — MIR AUTO';thumbs.forEach((item,index)=>item.classList.toggle('is-active',index===current));};root.querySelector('.gallery-prev').addEventListener('click',()=>show(current-1));root.querySelector('.gallery-next').addEventListener('click',()=>show(current+1));thumbs.forEach((item,index)=>item.addEventListener('click',()=>show(index)));})();

@@ -117,10 +117,6 @@ final class Database
                     $draft[$field] = $parsed[$field];
                 }
             }
-            if (empty($draft['description'])) {
-                $draft['description'] = 'Автомобиль из опубликованного предложения MIR AUTO. Свяжитесь с представителями, чтобы уточнить актуальность и условия покупки.';
-            }
-
             $seen = array_map('intval', $draft['photo_message_ids'] ?? []);
             if (in_array($messageId, $seen, true)) {
                 $this->pdo->commit();

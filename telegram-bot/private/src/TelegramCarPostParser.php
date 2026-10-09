@@ -176,6 +176,7 @@ final class TelegramCarPostParser
     private static function cleanDescriptionLine(string $line): string
     {
         $line = preg_replace('/[\p{So}\p{Sk}\p{Mn}]/u', '', $line) ?? $line;
+        $line = preg_replace('/^(?:хорошая|отличная)\s+комплектация\s*[:.\-–—]?\s*/ui', '', $line) ?? $line;
         return trim((string) preg_replace('/^[\p{P}\p{S}\s]+|[\p{P}\s]+$/u', '', $line));
     }
 

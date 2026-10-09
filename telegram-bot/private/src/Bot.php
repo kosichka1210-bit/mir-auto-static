@@ -831,7 +831,7 @@ final class Bot
             . "\n\nПроверьте данные. После публикации карточка попадёт в базу каталога.";
 
         if (!empty($draft['description'])) {
-            $text .= "\n\nОписание: " . $this->escape(mb_substr((string) $draft['description'], 0, 700));
+            $text .= "\n\nКомплектация: " . $this->escape(mb_substr((string) $draft['description'], 0, 700));
         }
 
         $fileIds = array_values(array_filter(array_map('strval', $draft['preview_file_ids'] ?? [])));
