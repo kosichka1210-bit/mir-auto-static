@@ -66,7 +66,7 @@ if (empty($front['drivetrain']) || empty($front['transmission'])) {
     fwrite(STDERR, 'FAIL front-drive/robot aliases' . PHP_EOL);
     exit(1);
 }
-$request = TelegramCarPostParser::parse("Марка: Haval\nМодель: H6\nГод: 2022.06\nЦена: по запросу");
+$request = TelegramCarPostParser::parse("Марка: Haval\nМодель: H6\nГод: 2022.06\nЦена: по запросу\nСтатус: Под заказ");
 if (empty($request['price_on_request']) || ($request['price_rub'] ?? null) !== null) {
     fwrite(STDERR, 'FAIL price-on-request marker' . PHP_EOL);
     exit(1);
@@ -74,6 +74,16 @@ if (empty($request['price_on_request']) || ($request['price_rub'] ?? null) !== n
 $missing = TelegramCarPostParser::missing($request);
 if ($missing !== ['хотя бы одна фотография']) {
     fwrite(STDERR, 'FAIL required fields: ' . json_encode($missing, JSON_UNESCAPED_UNICODE) . PHP_EOL);
+    exit(1);
+}
+$unknownStatus = TelegramCarPostParser::parse("Haval H6\n2022\nЦена: 1 425 000\nСтатус: в пути");
+if (isset($unknownStatus['status']) || !in_array('статус', TelegramCarPostParser::missing($unknownStatus), true)) {
+    fwrite(STDERR, 'FAIL unknown status must not be guessed: ' . json_encode($unknownStatus['status'] ?? null, JSON_UNESCAPED_UNICODE) . PHP_EOL);
+    exit(1);
+}
+$knownStatus = TelegramCarPostParser::parse("Haval H6\n2022\nЦена: 1 425 000\nВ наличии");
+if (($knownStatus['status'] ?? null) !== 'В наличии') {
+    fwrite(STDERR, 'FAIL explicit status phrase was not parsed.' . PHP_EOL);
     exit(1);
 }
 echo "Parser tests passed: Haval fields, month-year, powertrain aliases, three price formats and optionality." . PHP_EOL;

@@ -522,16 +522,23 @@ final class Bot
         $signature = implode('|', $missing);
         if (($draft['last_missing_prompt'] ?? null) !== $signature) {
             $labels = implode("\n• ", $missing);
+            $keyboard = [];
+            if (in_array('статус', $missing, true)) {
+                $keyboard[] = [
+                    ['text' => 'В наличии', 'callback_data' => 'import_status:available'],
+                    ['text' => 'Под заказ', 'callback_data' => 'import_status:ordered'],
+                    ['text' => 'Продано', 'callback_data' => 'import_status:sold'],
+                ];
+            }
+            if (in_array('цена или отметка «цена по запросу»', $missing, true)) {
+                $keyboard[] = [['text' => 'Цена по запросу', 'callback_data' => 'import_price_request']];
+            }
+            $keyboard[] = [['text' => 'Показать предпросмотр', 'callback_data' => 'preview_import']];
+            $keyboard[] = [['text' => 'Отменить импорт', 'callback_data' => 'cancel_publish']];
             $this->telegram->sendMessage(
                 $chatId,
-                "Не хватает только этих обязательных данных:\n• {$labels}\n\nПришлите исправление отдельными строками, например <code>Цена: 1 425 000</code> или <code>Год: 2022.06</code>. Остальное переписывать не нужно. Необязательные характеристики можно пропустить.",
-                [
-                    'inline_keyboard' => [
-                        [['text' => 'Цена по запросу', 'callback_data' => 'import_price_request']],
-                        [['text' => 'Показать предпросмотр', 'callback_data' => 'preview_import']],
-                        [['text' => 'Отменить импорт', 'callback_data' => 'cancel_publish']],
-                    ],
-                ]
+                "Не хватает только этих обязательных данных:\n• {$labels}\n\nЕсли поле есть в исходном посте, отправьте только его. Статус можно выбрать кнопкой; цену — отметить как «по запросу». Остальные данные переписывать не нужно.",
+                ['inline_keyboard' => $keyboard]
             );
             $draft['last_missing_prompt'] = $signature;
         }
@@ -560,8 +567,6 @@ final class Bot
                 (array) ($draft['images'] ?? []),
                 static fn ($path): bool => is_string($path) && is_file($path)
             ));
-            $draft['status'] = in_array(($draft['status'] ?? ''), ['В наличии', 'Под заказ', 'Продано'], true)
-                ? $draft['status'] : 'В наличии';
             $this->database->saveSession($userId, $chatId, 'confirm', $draft);
             $this->showPreview($chatId, $draft);
         } catch (Throwable $exception) {
@@ -606,6 +611,23 @@ final class Bot
         }
 
         $session = $this->database->getSession($userId);
+        $importStatuses = [
+            'import_status:available' => 'В наличии',
+            'import_status:ordered' => 'Под заказ',
+            'import_status:sold' => 'Продано',
+        ];
+        if (isset($importStatuses[$action]) && $session !== null
+            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
+            $draft = $session['draft'];
+            $draft['status'] = $importStatuses[$action];
+            $draft['last_missing_prompt'] = null;
+            $this->database->saveSession($userId, $chatId, 'import_missing', $draft);
+            $this->answerCallbackSafely($callbackId, 'Статус сохранён.');
+            $missing = TelegramCarPostParser::missing($draft);
+            if ($missing === []) $this->prepareForwardPreview($chatId, $userId);
+            else $this->sendMissingFieldsOnce($chatId, $userId, $draft, $missing);
+            return;
+        }
         if ($action === 'import_price_request' && $session !== null
             && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing'], true)) {
             $draft = $session['draft'];

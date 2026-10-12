@@ -130,7 +130,6 @@ final class Database
             }
             $draft['price_location'] = $draft['city'] ?? $draft['price_location'] ?? null;
             $draft['title'] ??= trim((string) ($draft['brand'] ?? '') . ' ' . (string) ($draft['model'] ?? '') . ' ' . (string) ($draft['trim_name'] ?? ''));
-            $draft['status'] ??= 'В наличии';
             $draft['last_missing_prompt'] ??= null;
             $update = $this->pdo->prepare(
                 'UPDATE bot_sessions SET chat_id = :chat_id, step = \'import_photos\', draft_json = :draft_json,

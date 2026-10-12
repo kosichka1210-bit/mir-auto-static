@@ -56,7 +56,8 @@ final class TelegramCarPostParser
             } elseif ($field === 'price_rub') {
                 self::setPrice($draft, $value);
             } elseif ($field === 'status') {
-                $draft[$field] = self::normalizeStatus($value);
+                $status = self::normalizeStatus($value);
+                if ($status !== null) $draft[$field] = $status;
             } else {
                 $draft[$field] = mb_substr($value, 0, $field === 'description' ? 5000 : 500);
             }
@@ -207,6 +208,9 @@ final class TelegramCarPostParser
         }
         if (empty($draft['photo_file_ids']) && empty($draft['images'])) $missing[] = 'хотя бы одна фотография';
         if (empty($draft['price_on_request']) && empty($draft['price_rub'])) $missing[] = 'цена или отметка «цена по запросу»';
+        if (!in_array((string) ($draft['status'] ?? ''), ['В наличии', 'Под заказ', 'Продано'], true)) {
+            $missing[] = 'статус';
+        }
         return $missing;
     }
 
@@ -249,10 +253,11 @@ final class TelegramCarPostParser
         return (int) preg_replace('/\D+/u', '', $value);
     }
 
-    private static function normalizeStatus(string $value): string
+    private static function normalizeStatus(string $value): ?string
     {
         if (preg_match('/продан/ui', $value) === 1) return 'Продано';
         if (preg_match('/заказ/ui', $value) === 1) return 'Под заказ';
-        return 'В наличии';
+        if (preg_match('/в\s+наличии/ui', $value) === 1) return 'В наличии';
+        return null;
     }
 }
