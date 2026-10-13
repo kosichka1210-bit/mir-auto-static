@@ -29,7 +29,7 @@ try {
     $database = new Database($config['database']);
     $statement = $database->pdo()->prepare(
         'SELECT id, slug, brand, model, title, year, year_detail, mileage_km, engine, power, transmission,
-                drivetrain, trim_name, price_rub, price_location, status, description
+                drivetrain, trim_name, price_rub, price_location, status, description, notes
          FROM cars WHERE slug = :slug AND published_at IS NOT NULL LIMIT 1'
     );
     $statement->execute(['slug' => $slug]);
@@ -105,7 +105,7 @@ if ($price !== null && $price > 0 && (string) $car['status'] !== 'Продано
 $jsonLd = json_encode($schema, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_THROW_ON_ERROR);
 $specs = [
     'Год' => (string) ($car['year_detail'] ?: $car['year']),
-    'Пробег' => $car['mileage_km'] !== null ? number_format((int) $car['mileage_km'], 0, ',', ' ') . ' км' : '',
+    'Пробег' => $car['mileage_km'] !== null ? number_format((int) $car['mileage_km'], 0, ',', ' ') . ' км' : (str_contains((string) ($car['notes'] ?? ''), 'Пробег: новое авто;') ? 'Новое авто' : ''),
     'Двигатель' => trim(implode(' · ', array_filter([(string) ($car['engine'] ?? ''), (string) ($car['power'] ?? '')]))),
     'Коробка передач' => (string) ($car['transmission'] ?? ''),
     'Привод' => (string) ($car['drivetrain'] ?? ''),

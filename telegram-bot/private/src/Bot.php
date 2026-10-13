@@ -843,7 +843,7 @@ final class Bot
             : 'Уточняйте';
         $mileage = isset($draft['mileage_km']) && $draft['mileage_km'] !== null
             ? number_format((int) $draft['mileage_km'], 0, ',', ' ') . ' км'
-            : 'не указан';
+            : (str_contains((string) ($draft['notes'] ?? ''), 'Пробег: новое авто;') ? 'новое авто, точный пробег не указан' : 'не указан');
 
         $text = "<b>Предварительный просмотр</b>\n\n"
             . '<b>' . $this->escape((string) $draft['brand'] . ' ' . (string) $draft['model']) . "</b>\n"

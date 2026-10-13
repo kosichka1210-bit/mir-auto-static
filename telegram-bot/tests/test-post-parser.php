@@ -92,4 +92,14 @@ if (($knownStatus['status'] ?? null) !== 'В наличии') {
     fwrite(STDERR, 'FAIL explicit status phrase was not parsed.' . PHP_EOL);
     exit(1);
 }
-echo "Parser tests passed: Haval fields, month-year, powertrain aliases, three price formats and optionality." . PHP_EOL;
+$electric = TelegramCarPostParser::parse("Changan Qiyuan Nevo Q05\n(506 Max+)\nВ наличии два авто\n- 2026 год\n- 120 кВт (163 л.с.) электро\n- 2WD передний привод\n- Редуктор\n- пробег - новое авто\nПредмаксимальная комплектация. Запас хода 506км. Кожаный салон, панорама.\nЦена: 2.282.000");
+foreach (['model'=>'Qiyuan Nevo Q05','trim_name'=>'506 Max+','engine'=>'Электрический','power'=>'120 кВт · 163 л.с.','transmission'=>'Редуктор','price_rub'=>2282000] as $field=>$value) {
+    if (($electric[$field] ?? null) !== $value) { fwrite(STDERR, 'FAIL electric field ' . $field . PHP_EOL); exit(1); }
+}
+if (isset($electric['mileage_km']) || !str_contains($electric['notes'] ?? '', 'Пробег: новое авто;')
+    || preg_match('/В наличии|120 кВт|Редуктор|506 Max/ui', $electric['description'] ?? '') === 1) {
+    fwrite(STDERR, 'FAIL range must not become mileage, and specs must not enter equipment copy.' . PHP_EOL); exit(1);
+}
+$zero = TelegramCarPostParser::parse("Haval H6\nПробег: 0 км\nЗапас хода: 506 км");
+if (($zero['mileage_km'] ?? null) !== 0) { fwrite(STDERR, 'FAIL explicit zero mileage.' . PHP_EOL); exit(1); }
+echo "Parser tests passed: factual fields, electric models, range/mileage separation, descriptions, prices and status." . PHP_EOL;

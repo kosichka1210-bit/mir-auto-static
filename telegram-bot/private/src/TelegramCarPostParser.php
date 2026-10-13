@@ -52,7 +52,7 @@ final class TelegramCarPostParser
                 self::setYear($draft, $value);
             } elseif ($field === 'mileage_km') {
                 $number = self::number($value);
-                if ($number > 0) $draft[$field] = $number;
+                if (preg_match('/\d/u', $value) === 1) $draft[$field] = $number;
             } elseif ($field === 'price_rub') {
                 self::setPrice($draft, $value);
             } elseif ($field === 'status') {
@@ -74,14 +74,20 @@ final class TelegramCarPostParser
                     if (preg_match('/^' . preg_quote($needle, '/') . '\s+(.+)$/iu', $title, $match) === 1) {
                         $draft['brand'] ??= $brand;
                         $remainder = trim((string) preg_replace('/\b(?:19|20)\d{2}(?:[.\/-](?:0?[1-9]|1[0-2]))?\b/u', '', $match[1]), " \t\n\r\0\x0B-–|,;");
-                        $parts = preg_split('/\s+/u', $remainder, 2) ?: [];
-                        // Trumpchi is GAC's model family; GS4/GS8 is part of the
-                        // model, not equipment. Keep the named trim separately.
-                        if ($brand === 'GAC' && preg_match('/^(Trumpchi\s+[A-Za-z0-9-]+)(?:\s+(.*))?$/iu', $remainder, $modelMatch) === 1) {
-                            $parts = [$modelMatch[1], trim((string) ($modelMatch[2] ?? ''), ' ()')];
+                        if (preg_match('/^(.*?)\s*\(([^)]+)\)\s*$/u', $remainder, $trimMatch) === 1) {
+                            $remainder = trim($trimMatch[1]);
+                            $draft['trim_name'] ??= trim($trimMatch[2]);
                         }
-                        $draft['model'] ??= $parts[0] ?? null;
-                        if (!empty($parts[1])) $draft['trim_name'] ??= trim($parts[1]);
+                        foreach ($lines as $trimLine) {
+                            if (preg_match('/^\s*\(([^)]+)\)\s*$/u', $trimLine, $trimMatch) === 1) {
+                                $draft['trim_name'] ??= trim($trimMatch[1]);
+                                break;
+                            }
+                        }
+                        if (!empty($draft['trim_name'])) {
+                            $remainder = trim((string) preg_replace('/\s+' . preg_quote((string) $draft['trim_name'], '/') . '$/iu', '', $remainder));
+                        }
+                        $draft['model'] ??= $remainder;
                         $draft['title'] ??= $title;
                         break;
                     }
@@ -89,9 +95,11 @@ final class TelegramCarPostParser
             }
         }
 
-        if (preg_match('/(?:пробег\s*[:：-]?\s*)?([0-9][0-9\s.,]*)\s*(?:км|km)\b/ui', $text, $match) === 1) {
+        if (preg_match('/пробег\s*[:：-]?\s*([0-9][0-9\s.,]*)\s*(?:км|km)\b/ui', $text, $match) === 1) {
             $number = self::number($match[1]);
-            if ($number > 0) $draft['mileage_km'] ??= $number;
+            $draft['mileage_km'] ??= $number;
+        } elseif (preg_match('/пробег\s*[:：-]?\s*(?:новое\s+авто|новый\s+автомобиль)/ui', $text) === 1) {
+            $draft['notes'] = trim((string) ($draft['notes'] ?? '') . "\nПробег: новое авто; точное значение не указано.");
         }
         if (preg_match('/(?:цена|стоимость)[^\n]{0,160}?[:：-]?\s*(?:[^\d\n]{0,24})?([0-9][0-9 \t.,]*)/ui', $text, $match) === 1) {
             self::setPrice($draft, $match[1]);
@@ -111,6 +119,15 @@ final class TelegramCarPostParser
         if (empty($draft['power']) && preg_match('/\b(\d{2,3})\s*(?:л\.?\s*с\.?|лс|hp)\b/ui', $text, $match) === 1) {
             $draft['power'] = $match[1] . ' л.с.';
         }
+        if (preg_match('/\b(\d{2,4})\s*(?:кВт|kW)\b/ui', $text, $kilowatts) === 1) {
+            $draft['power'] = $kilowatts[1] . ' кВт';
+            if (preg_match('/\b(\d{2,3})\s*(?:л\.?\s*с\.?|лс|hp)\b/ui', $text, $horsepower) === 1) {
+                $draft['power'] .= ' · ' . $horsepower[1] . ' л.с.';
+            }
+        }
+        if (empty($draft['engine']) && preg_match('/\bэлектро(?:мобиль|двигатель)?\b/ui', $text) === 1) {
+            $draft['engine'] = 'Электрический';
+        }
         if (empty($draft['drivetrain'])) {
             if (preg_match('/\b(2WD|4WD|AWD|4x4)\b/ui', $text, $match) === 1) {
                 $drive = strtoupper($match[1]);
@@ -122,7 +139,7 @@ final class TelegramCarPostParser
         if (empty($draft['transmission'])) {
             foreach ([
                 '/\bCVT\b/ui' => 'CVT', '/вариатор/ui' => 'Вариатор', '/робот(?:изированная)?/ui' => 'Робот',
-                '/\bавтомат(?:ическая)?\b/ui' => 'Автомат', '/\bмеханика\b/ui' => 'Механика',
+                '/\bавтомат(?:ическая)?\b/ui' => 'Автомат', '/\bмеханика\b/ui' => 'Механика', '/\bредуктор\b/ui' => 'Редуктор',
             ] as $pattern => $label) {
                 if (preg_match($pattern, $text) === 1) { $draft['transmission'] = $label; break; }
             }
@@ -164,6 +181,8 @@ final class TelegramCarPostParser
                 $line = self::cleanDescriptionLine($line);
                 if ($line === '' || preg_match('/[\p{L}]{2}/u', $line) !== 1) continue;
                 if ($vehiclePrefix !== '' && preg_match('/^' . preg_quote($vehiclePrefix, '/') . '(?:\s|$)/iu', $line) === 1) continue;
+                if (!empty($draft['trim_name']) && mb_strtolower($line) === mb_strtolower(self::cleanDescriptionLine((string) $draft['trim_name']))) continue;
+                if (preg_match('/^(?:в\s+наличии|под\s+заказ|редуктор\b|\d{2,4}\s*(?:кВт|kW)\b)/ui', $line) === 1) continue;
                 if (preg_match('/^(?:[-–—]\s*)?(?:(?:19|20)\d{2}(?:[.\/-]\d{1,2})?\s*(?:год)?|год\b|пробег\b|двигатель\b|мотор\b|мощность\b|привод\b|коробка\b|кпп\b|трансмиссия\b|цена\b|стоимость\b|город\b|статус\b|марка\b|модель\b|комплектация\s*:|версия\s*:|\d(?:[.,]\d)?\s*[TТ](?:\s|$)|\d{2,3}\s*л\.?\s*с\.?\b|(?:2WD|4WD|AWD|4x4|CVT)\b|автомат\b|робот\b|механика\b|вариатор\b)/ui', $line) === 1) continue;
                 if (preg_match('/китайская экспортная компания|без посредник|сопровождение сделки|стоимость автомобиля|по актуальному курсу|«?мир авто»|ваш путь к идеальному|под ключ|\bвладимир\b|\bолег\b|мы в max|https?:\/\/|t\.me\//ui', $line) === 1) continue;
                 if (preg_match('/(?:\+?\d[\d() -]{8,}\d)/u', $line) === 1) continue;
