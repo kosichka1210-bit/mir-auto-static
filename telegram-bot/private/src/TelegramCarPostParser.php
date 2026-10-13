@@ -75,6 +75,11 @@ final class TelegramCarPostParser
                         $draft['brand'] ??= $brand;
                         $remainder = trim((string) preg_replace('/\b(?:19|20)\d{2}(?:[.\/-](?:0?[1-9]|1[0-2]))?\b/u', '', $match[1]), " \t\n\r\0\x0B-–|,;");
                         $parts = preg_split('/\s+/u', $remainder, 2) ?: [];
+                        // Trumpchi is GAC's model family; GS4/GS8 is part of the
+                        // model, not equipment. Keep the named trim separately.
+                        if ($brand === 'GAC' && preg_match('/^(Trumpchi\s+[A-Za-z0-9-]+)(?:\s+(.*))?$/iu', $remainder, $modelMatch) === 1) {
+                            $parts = [$modelMatch[1], trim((string) ($modelMatch[2] ?? ''), ' ()')];
+                        }
                         $draft['model'] ??= $parts[0] ?? null;
                         if (!empty($parts[1])) $draft['trim_name'] ??= trim($parts[1]);
                         $draft['title'] ??= $title;

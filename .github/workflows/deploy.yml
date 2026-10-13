@@ -23,6 +23,8 @@ jobs:
         run: find telegram-bot -name '*.php' -print0 | xargs -0 -n1 php -l
       - name: Test forwarded-post field parsing
         run: php telegram-bot/tests/test-post-parser.php
+      - name: Test immediate webhook album receipt
+        run: php telegram-bot/tests/test-webhook-receipt.php
 
   publish:
     needs: php-checks

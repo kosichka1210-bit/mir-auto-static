@@ -162,6 +162,24 @@ try {
     $deliveryMode = 'durable_queue';
     $logTiming('queued');
     http_response_code(200);
+    // Reply through Telegram's webhook response before the queue worker starts
+    // parsing text or downloading photos. One receipt per forwarded album.
+    $forwarded = is_array($message) && (isset($message['forward_origin'])
+        || isset($message['forward_from_chat']) || isset($message['forward_date']));
+    $chatId = is_array($message) ? (int) ($message['chat']['id'] ?? 0) : 0;
+    $userId = is_array($message) ? (int) ($message['from']['id'] ?? 0) : 0;
+    $allowedUsers = array_map('intval', $config['telegram']['allowed_user_ids'] ?? []);
+    if ($forwarded && ($message['chat']['type'] ?? '') === 'private'
+        && $chatId > 0 && in_array($userId, $allowedUsers, true)) {
+        $receiptId = hash('sha256', $chatId . ':' . (string) ($message['media_group_id'] ?? $updateId));
+        $receipt = @fopen($queueDir . '/' . $receiptId . '.receipt', 'x');
+        if ($receipt !== false) {
+            fwrite($receipt, gmdate(DATE_ATOM));
+            fclose($receipt);
+            $deliveryMode = 'telegram_webhook_receipt';
+            $replyThroughWebhook($chatId, ['text' => 'Пост получен, обрабатываю текст и фотографии…']);
+        }
+    }
     echo json_encode(['ok' => true]);
     if (function_exists('fastcgi_finish_request')) {
         fastcgi_finish_request();

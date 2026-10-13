@@ -24,6 +24,12 @@ if (($parsed['trim_name'] ?? '') !== 'Champion Edition') {
 }
 $messyPost = "☄️ 😉😉😉✅\n\n🚙GAC Trumpchi GS4 (270T Smart Technology)\n\n⚙️\n- 2022.10 год\n- 1.5T (169 л.с.)\n- 2WD передний привод\n- Автомат\n- пробег 33.000 км.\n\n➡️ Хорошая комплектация. Ассистенты, кожаный салон, панорама, повторители в зеркалах, круиз, климат, сенсорная мультимедия, багажник с кнопки, обзор 360, выбор режимов движения, мультируль, управление светом.\n\n✅ Мы — Китайская экспортная компания с прямой продажей без посредников.\nСопровождение сделки под ключ!\n\nСтоимость автомобиля, под ключ в г. Владивостоке:\n💸1.380.000 по актуальному курсу\n\n«Мир Авто» — Ваш путь к идеальному автомобилю!";
 $cleanDescription = TelegramCarPostParser::parse($messyPost);
+if (($cleanDescription['model'] ?? null) !== 'Trumpchi GS4'
+    || ($cleanDescription['trim_name'] ?? null) !== '270T Smart Technology'
+    || ($cleanDescription['price_rub'] ?? null) !== 1380000) {
+    fwrite(STDERR, 'FAIL GAC model, trim or price extraction.' . PHP_EOL);
+    exit(1);
+}
 if (($cleanDescription['year_detail'] ?? null) !== '2022'
     || !str_starts_with((string) ($cleanDescription['description'] ?? ''), 'Ассистенты, кожаный салон')
     || preg_match('/^Автомобиль из опубликованного предложения MIR AUTO|^Хорошая комплектация/ui', (string) ($cleanDescription['description'] ?? '')) === 1
