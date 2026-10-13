@@ -751,11 +751,6 @@ final class Bot
                 (string) $this->config['app']['media_dir']
             );
             $this->database->deleteSession($userId);
-            $this->telegram->sendMessage(
-                $chatId,
-                '<b>Автомобиль опубликован.</b>\nID: ' . $result['id'] . '\nАдрес карточки: <code>' . htmlspecialchars($result['slug']) . '</code>',
-                self::homeKeyboard()
-            );
         } catch (Throwable $exception) {
             // Keep the retry gate short: a transient file API timeout should
             // not force the user to wait through a long cooldown.
@@ -766,6 +761,20 @@ final class Bot
                 'photo_count' => count($draft['photo_file_ids'] ?? []),
             ]);
             $this->telegram->sendMessage($chatId, 'Не удалось сохранить автомобиль. Черновик и уже загруженные фотографии сохранены; попробуйте /publish ещё раз позже.');
+            return;
+        }
+        // A notification failure must never restore an already published draft.
+        try {
+            $this->telegram->sendMessage(
+                $chatId,
+                '<b>Автомобиль опубликован.</b>\nID: ' . $result['id'] . '\nАдрес карточки: <code>' . htmlspecialchars($result['slug']) . '</code>',
+                self::homeKeyboard()
+            );
+        } catch (Throwable $exception) {
+            TelegramClient::logPerformance('car_publish_notification_error', [
+                'error_class' => get_class($exception),
+                'car_id' => $result['id'],
+            ]);
         }
     }
 
