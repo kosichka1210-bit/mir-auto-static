@@ -73,6 +73,17 @@ final class Bot
         }
 
         if ($text === '/addcar' || $text === 'Добавить автомобиль') {
+            $existing = $this->database->getSession($userId);
+            $draft = $existing['draft'] ?? [];
+            if ($existing !== null && (!empty($draft['brand']) || !empty($draft['photo_file_ids']) || !empty($draft['images']))) {
+                $this->telegram->sendMessage($chatId, 'Текущий черновик сохранён. Продолжите его или отмените через /cancel перед добавлением другого автомобиля.');
+                if (in_array((string) $existing['step'], ['import_photos', 'import_missing'], true)) {
+                    $this->sendImportInstructions($chatId, $draft);
+                } elseif ((string) $existing['step'] === 'confirm') {
+                    $this->showPreview($chatId, $draft);
+                }
+                return;
+            }
             $this->database->saveSession($userId, $chatId, 'brand', ['images' => []]);
             $this->askStep($chatId, 'brand');
             return;
