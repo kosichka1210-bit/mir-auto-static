@@ -181,7 +181,7 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
-    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=uniform-cards-2', text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=contact-anchors-4', text)
     text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=contact-anchors-3', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -234,6 +234,17 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     source = source.replace('Подробнее <b>↗</b>', 'Подробнее')
     source = source.replace("car.mileage_km ? `${number(car.mileage_km)} км` : ''", "car.mileage_km != null ? `${number(car.mileage_km)} км` : 'Пробег не указан'")
     source = source.replace("facts.slice(0, 3).map(text)", "facts.map(text)")
+    if 'anchorUserScrolled' not in source:
+        source = source.replace('  const controller = new AbortController();', '''  const initialAnchor = location.hash;
+  let anchorUserScrolled = false;
+  ['wheel','touchstart','keydown'].forEach(type => window.addEventListener(type, () => { anchorUserScrolled = true; }, {once:true,passive:true}));
+  const controller = new AbortController();''')
+        source = source.replace('.finally(() => window.clearTimeout(timeout));', '''.finally(() => {
+      window.clearTimeout(timeout);
+      if (!anchorUserScrolled && location.hash === initialAnchor && ['#form','#contacts'].includes(initialAnchor)) {
+        requestAnimationFrame(() => document.querySelector(initialAnchor)?.scrollIntoView({block:'start',behavior:'instant'}));
+      }
+    });''')
     script.write_text(source, encoding="utf-8", newline="")
     stylesheet = root / "style.css"
     css = stylesheet.read_text(encoding="utf-8")
