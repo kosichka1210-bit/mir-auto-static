@@ -177,6 +177,8 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=uniform-cards-2', text)
+    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=uniform-cards-2', text)
     if kind == "home":
         text = set_structured_data(text, page_graph("home", title, description, canonical, image))
     elif kind == "catalog":
@@ -223,11 +225,29 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
         source = source.replace('<div class="car-top"><p class="status">${status}</p><p class="price">${price}</p></div>', '<a class="car-summary-link" href="${detailsUrl}"><div class="car-top"><p class="status">${status}</p><p class="price">${price}</p></div>')
         source = source.replace('<div class="catalog-card-actions">', '</a><div class="catalog-card-actions">')
     source = source.replace('Подробнее <b>↗</b>', 'Подробнее')
+    source = source.replace("car.mileage_km ? `${number(car.mileage_km)} км` : ''", "car.mileage_km != null ? `${number(car.mileage_km)} км` : 'Пробег не указан'")
+    source = source.replace("facts.slice(0, 3).map(text)", "facts.map(text)")
     script.write_text(source, encoding="utf-8", newline="")
     stylesheet = root / "style.css"
     css = stylesheet.read_text(encoding="utf-8")
     if '.car-summary-link{' not in css:
         stylesheet.write_text(css + '\n.car-summary-link{display:block;color:inherit;text-decoration:none}.car-summary-link:focus-visible{outline:2px solid currentColor;outline-offset:4px}\n', encoding="utf-8")
+    css = stylesheet.read_text(encoding="utf-8")
+    if '/* unified live cards */' not in css:
+        stylesheet.write_text(css + '''
+/* unified live cards */
+.live-car-card .car-summary-link{flex:1;min-width:0}
+.live-car-card h3{font:800 26px/1.2 Manrope,Arial,sans-serif;letter-spacing:-.04em;min-height:2.4em;margin:24px 0 14px;overflow-wrap:anywhere}
+.live-car-card .car-specs{font:400 16px/1.55 Manrope,Arial,sans-serif;min-height:4.65em;margin:0 0 24px;overflow-wrap:anywhere}
+.live-car-card .car-top{min-height:48px;align-items:flex-start}
+.live-car-card .price{font:800 22px/1.25 Manrope,Arial,sans-serif;margin:0;text-align:right}
+.live-car-card .status{font:800 13px/1.4 Manrope,Arial,sans-serif;margin:0;letter-spacing:.07em}
+.catalog-card-actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:auto;align-items:stretch}
+.live-car-card .catalog-card-actions .button{width:100%;min-width:0;height:60px;min-height:60px;margin:0;padding:8px 10px;font:800 14px/1.25 Manrope,Arial,sans-serif;text-align:center;white-space:normal;overflow-wrap:anywhere;gap:0}
+.catalog-card-actions .arrow-link::before,.catalog-card-actions .arrow-link::after{content:none!important;display:none!important}
+.catalog-card-actions .arrow-link b{display:none}
+@media(max-width:360px){.live-car-card .car-copy{padding:18px}.live-car-card h3{font-size:24px}.live-car-card .catalog-card-actions .button{font-size:13px}}
+''', encoding="utf-8")
 
 
 def main() -> int:
