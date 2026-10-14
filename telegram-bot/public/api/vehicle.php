@@ -63,9 +63,8 @@ $description = trim(preg_replace('/\s+/u', ' ', strip_tags((string) ($car['descr
 $description = preg_replace('/^Автомобиль из опубликованного предложения MIR AUTO\.?\s*/ui', '', $description) ?? $description;
 $description = preg_replace('/^(?:хорошая|отличная)\s+комплектация\s*[:.\-–—]?\s*/ui', '', $description) ?? $description;
 $description = trim(mb_substr($description, 0, 1200));
-$metaDescription = $description !== ''
-    ? mb_substr($description, 0, 260)
-    : $title . ' — характеристики и фотографии в каталоге MIR AUTO.';
+$metaDescription = $title . ' ' . (string) $car['year'] . ' из Китая — характеристики, комплектация и фотографии. '
+    . 'Актуальную цену и условия покупки и доставки в Санкт-Петербург уточняйте в MIR AUTO.';
 $image = $images[0] ?? ($baseUrl . '/og.png');
 $price = $car['price_rub'] !== null ? (int) $car['price_rub'] : null;
 $schema = [
