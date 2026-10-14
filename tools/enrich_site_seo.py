@@ -130,6 +130,10 @@ def enrich(page: Path, root: Path) -> None:
     text = page.read_text(encoding="utf-8")
     if relative == "index.html":
         kind = "home"
+        text = text.replace('<section class="contact-section" id="form">', '<section class="contact-section" id="contact-section">')
+        text = text.replace('<form class="request-form">', '<form class="request-form" id="form">')
+        text = text.replace('<div class="contact-directory">', '<div class="contact-directory" id="contacts">')
+        text = re.sub(r'href="#form"(>\s*(?:Контакты|Связаться с представителями)\s*</a>)', r'href="#contacts"\1', text)
         title, description, canonical = HOME_TITLE, HOME_DESCRIPTION, f"{SITE}/"
         image = f"{SITE}/og.png"
         if SPB_PARAGRAPH not in text:
@@ -178,7 +182,10 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
     text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=uniform-cards-2', text)
-    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=uniform-cards-2', text)
+    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=contact-anchors-3', text)
+    if kind != 'home':
+        text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
+        text = re.sub(r'href="/#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
     if kind == "home":
         text = set_structured_data(text, page_graph("home", title, description, canonical, image))
     elif kind == "catalog":
@@ -230,6 +237,9 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     script.write_text(source, encoding="utf-8", newline="")
     stylesheet = root / "style.css"
     css = stylesheet.read_text(encoding="utf-8")
+    if '/* precise contact anchors */' not in css:
+        css += '\n/* precise contact anchors */\n#form,#contacts{scroll-margin-top:100px} .request-form{min-width:0}\n'
+        stylesheet.write_text(css, encoding="utf-8")
     if '.car-summary-link{' not in css:
         stylesheet.write_text(css + '\n.car-summary-link{display:block;color:inherit;text-decoration:none}.car-summary-link:focus-visible{outline:2px solid currentColor;outline-offset:4px}\n', encoding="utf-8")
     css = stylesheet.read_text(encoding="utf-8")
