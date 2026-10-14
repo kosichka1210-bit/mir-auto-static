@@ -219,7 +219,15 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
         "const detailsUrl = new URL(`avtomobili/${encodeURIComponent(car.slug)}/`, siteRoot).href;",
     )
     source = source.replace("      car.year,\n", "      car.year_detail || car.year,\n")
+    if 'class="car-summary-link"' not in source:
+        source = source.replace('<div class="car-top"><p class="status">${status}</p><p class="price">${price}</p></div>', '<a class="car-summary-link" href="${detailsUrl}"><div class="car-top"><p class="status">${status}</p><p class="price">${price}</p></div>')
+        source = source.replace('<div class="catalog-card-actions">', '</a><div class="catalog-card-actions">')
+    source = source.replace('Подробнее <b>↗</b>', 'Подробнее')
     script.write_text(source, encoding="utf-8", newline="")
+    stylesheet = root / "style.css"
+    css = stylesheet.read_text(encoding="utf-8")
+    if '.car-summary-link{' not in css:
+        stylesheet.write_text(css + '\n.car-summary-link{display:block;color:inherit;text-decoration:none}.car-summary-link:focus-visible{outline:2px solid currentColor;outline-offset:4px}\n', encoding="utf-8")
 
 
 def main() -> int:
@@ -234,6 +242,9 @@ def main() -> int:
         enrich(page, root)
     update_sitemap(root)
     make_live_vehicle_urls_clean(root)
+    verification = Path(__file__).resolve().parent / "googlefa09f061eac4b9cb.html"
+    if verification.is_file():
+        (root / verification.name).write_bytes(verification.read_bytes())
     robots = root / "robots.txt"
     if not robots.exists() or f"Sitemap: {SITE}/sitemap.xml" not in robots.read_text(encoding="utf-8"):
         print("robots.txt must reference the canonical sitemap URL.", file=sys.stderr)
