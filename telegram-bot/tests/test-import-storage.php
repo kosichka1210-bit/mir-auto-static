@@ -36,7 +36,15 @@ try {
     if ($claimed === null || $claimedAgain !== null) {
         throw new RuntimeException('Preview claim was not idempotent.');
     }
-    echo "Production DB import test passed: 2 album items persisted, duplicate suppressed, preview claimed once; no car row created." . PHP_EOL;
+    $noticeOne = $database->appendForwardedPost($userId, $userId, [], 10003, 'blocked-album', 'blocked-file-1');
+    $noticeTwo = $database->appendForwardedPost($userId, $userId, [], 10004, 'blocked-album', 'blocked-file-2');
+    $after = $database->getSession($userId);
+    if (($noticeOne['notify'] ?? false) !== true || ($noticeTwo['notify'] ?? true) !== false
+        || ($after['step'] ?? '') !== 'import_processing'
+        || count($after['draft']['photo_file_ids'] ?? []) !== 2) {
+        throw new RuntimeException('Blocked album notice deduplication changed the existing draft.');
+    }
+    echo "Production DB import test passed: album persisted, duplicates suppressed, one notice per blocked album; no car row created." . PHP_EOL;
 } finally {
     $database->deleteSession($userId);
 }

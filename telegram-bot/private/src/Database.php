@@ -97,16 +97,29 @@ final class Database
             $select->execute(['user_id' => $userId]);
             $row = $select->fetch();
             if (!$row) throw new RuntimeException('Не удалось создать черновик импорта.');
+            $notifyBlockedImport = function () use ($row, $userId, $mediaGroupId, $messageId): bool {
+                $draft = json_decode((string) $row['draft_json'], true, 512, JSON_THROW_ON_ERROR);
+                $key = $mediaGroupId !== null ? 'album:' . $mediaGroupId : 'message:' . $messageId;
+                $seen = (array) ($draft['blocked_import_notices'] ?? []);
+                if (in_array($key, $seen, true)) return false;
+                $seen[] = $key;
+                $draft['blocked_import_notices'] = array_slice($seen, -20);
+                $statement = $this->pdo->prepare('UPDATE bot_sessions SET draft_json = :draft WHERE user_id = :user_id');
+                $statement->execute(['draft' => json_encode($draft, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), 'user_id' => $userId]);
+                return true;
+            };
             if (!in_array((string) $row['step'], ['import_photos', 'import_missing'], true)) {
+                $notify = $notifyBlockedImport();
                 $this->pdo->commit();
-                return ['status' => 'busy', 'created' => false];
+                return ['status' => 'busy', 'created' => false, 'notify' => $notify];
             }
 
             $draft = json_decode((string) $row['draft_json'], true, 512, JSON_THROW_ON_ERROR);
             $oldGroup = (string) ($draft['media_group_id'] ?? '');
             if ($mediaGroupId !== null && $oldGroup !== '' && $oldGroup !== $mediaGroupId) {
+                $notify = $notifyBlockedImport();
                 $this->pdo->commit();
-                return ['status' => 'different_import', 'created' => false];
+                return ['status' => 'different_import', 'created' => false, 'notify' => $notify];
             }
             if ($mediaGroupId !== null) $draft['media_group_id'] = $mediaGroupId;
 

@@ -512,7 +512,9 @@ final class Bot
         );
         if (($result['status'] ?? '') === 'duplicate') return;
         if (in_array(($result['status'] ?? ''), ['busy', 'different_import'], true)) {
-            $this->telegram->sendMessage($chatId, 'Сначала завершите текущий импорт или отмените его командой /cancel.');
+            if (!empty($result['notify'])) {
+                $this->telegram->sendMessage($chatId, 'Сначала завершите текущий импорт или отмените его командой /cancel.');
+            }
             return;
         }
         $draft = $result['draft'] ?? [];
