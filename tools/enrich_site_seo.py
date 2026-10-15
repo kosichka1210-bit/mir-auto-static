@@ -183,8 +183,8 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
-    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=catalog-retry-5', text)
-    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=contact-anchors-3', text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=card-fields-6', text)
+    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=card-fields-6', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./|/)?#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
         text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -237,6 +237,15 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     source = source.replace('Подробнее <b>↗</b>', 'Подробнее')
     source = source.replace("car.mileage_km ? `${number(car.mileage_km)} км` : ''", "car.mileage_km != null ? `${number(car.mileage_km)} км` : 'Пробег не указан'")
     source = source.replace("facts.slice(0, 3).map(text)", "facts.map(text)")
+    source = re.sub(r'    const facts = \[.*?\]\.filter\(Boolean\);', '''    const facts = [
+      ['Год', car.year || 'Не указано'],
+      ['Пробег', car.mileage_km != null ? `${number(car.mileage_km)} км` : (/новое авто/i.test(car.notes || '') ? 'Новое авто' : 'Не указано')],
+      ['Двигатель', car.engine || 'Не указано'],
+      ['Мощность', car.power || 'Не указано'],
+      ['Коробка', car.transmission || 'Не указано'],
+      ['Привод', car.drive || car.drivetrain || 'Не указано']
+    ];''', source, count=1, flags=re.S)
+    source = source.replace("facts.map(text).join(' · ')", "facts.map(([label, value]) => `<span class=\"car-fact\"><span class=\"car-fact-label\">${text(label)}</span><span>${text(value)}</span></span>`).join('')")
     source = source.replace("const contact = new URL('#form', siteRoot).href;", "const contact = new URL('#contacts', siteRoot).href;")
     source = source.replace("const API = 'https://bot.mir-auto-china.ru/api/cars.php';", "const API = new URL('/api/cars.php', location.origin).href;")
     source = source.replace('  const controller = new AbortController();\n  const timeout = window.setTimeout(() => controller.abort(), 6000);', '''  let timeout;
@@ -271,6 +280,8 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     script.write_text(source, encoding="utf-8", newline="")
     stylesheet = root / "style.css"
     css = stylesheet.read_text(encoding="utf-8")
+    css += '\n.live-car-card .car-specs{display:grid;gap:6px}.car-fact{display:grid;grid-template-columns:86px minmax(0,1fr);gap:8px;min-height:2.5em;align-items:start}.car-fact-label{color:#aaa5b0}.car-fact>span:last-child{text-align:right;overflow-wrap:anywhere}\n'
+    stylesheet.write_text(css, encoding="utf-8")
     if '/* precise contact anchors */' not in css:
         css += '\n/* precise contact anchors */\n#form,#contacts{scroll-margin-top:100px} .request-form{min-width:0}\n'
         stylesheet.write_text(css, encoding="utf-8")
