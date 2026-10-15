@@ -490,7 +490,8 @@ final class Bot
         $text = $hasPhotos
             ? '<b>Пересланный пост принят.</b> Собираю фотографии этого альбома. Когда Telegram закончит пересылку, нажмите «Проверить и показать предпросмотр».'
             : '<b>Текст поста принят.</b> Теперь перешлите фотографию или альбом этого автомобиля. Когда всё придёт, нажмите «Проверить и показать предпросмотр».';
-        $this->telegram->sendMessage($chatId, $text, [
+        require_once __DIR__ . '/ContactDeliveryQueue.php';
+        ContactDeliveryQueue::enqueue(dirname(__DIR__) . '/storage/contact-queue', [$chatId], $text, [
             'inline_keyboard' => [
                 [['text' => 'Проверить и показать предпросмотр', 'callback_data' => 'preview_import']],
                 [['text' => 'Отменить импорт', 'callback_data' => 'cancel_publish']],

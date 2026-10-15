@@ -15,5 +15,11 @@ try {
     ContactDeliveryQueue::processOne($dir,$send);
     ContactDeliveryQueue::processOne($dir,static function(int $id,string $text)use(&$received):void{$received[]=$id;});
     if($received!==[1,3,2]||glob($dir.'/*.json')!==[])throw new RuntimeException('Retry duplicated or lost delivery');
-    echo "Contact queue test passed: failure retained, other staff delivered, successes not repeated.\n";
+    $markup=['inline_keyboard'=>[[['text'=>'Preview','callback_data'=>'preview_import']]]];
+    ContactDeliveryQueue::enqueue($dir,[1],'preview fixture',$markup);
+    ContactDeliveryQueue::processOne($dir,static function(int $id,string $text,?array $buttons)use($markup):void{
+        if($buttons!==$markup)throw new LogicException('Preview buttons lost');
+    });
+    if(glob($dir.'/*.json')!==[])throw new RuntimeException('Keyboard message not delivered');
+    echo "Contact queue test passed: retry, no repeated successes, preview buttons preserved.\n";
 }finally{foreach(glob($dir.'/*')?:[]as$file)unlink($file);if(is_dir($dir))rmdir($dir);}

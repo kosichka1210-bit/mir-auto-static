@@ -14,12 +14,13 @@ final class ContactDeliveryQueue
         } finally { if (is_file($temp)) unlink($temp); }
     }
 
-    public static function enqueue(string $directory, array $recipients, string $message): void
+    public static function enqueue(string $directory, array $recipients, string $message, ?array $replyMarkup = null): void
     {
         if (!is_dir($directory) && !mkdir($directory, 0700, true) && !is_dir($directory)) throw new RuntimeException('contact_queue_unavailable');
         self::save($directory . '/' . bin2hex(random_bytes(16)) . '.json', [
             'message' => $message, 'pending' => array_values(array_unique($recipients)),
             'delivered' => [], 'retry_at' => 0, 'attempts' => 0,
+            'reply_markup' => $replyMarkup,
         ]);
     }
 
@@ -38,7 +39,7 @@ final class ContactDeliveryQueue
                 $id = (int) ($job['pending'][0] ?? 0);
                 if ($id <= 0) { unlink($path); continue; }
                 try {
-                    $send($id, (string) $job['message']);
+                    $send($id, (string) $job['message'], $job['reply_markup'] ?? null);
                     array_shift($job['pending']);
                     $job['delivered'][] = $id;
                     $job['attempts'] = 0;

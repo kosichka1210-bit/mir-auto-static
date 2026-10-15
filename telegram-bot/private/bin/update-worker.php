@@ -20,7 +20,7 @@ foreach ([$queueDir, $doneDir, $failedDir] as $directory) {
 while (true) {
     try {
         ContactDeliveryQueue::processOne($botRoot . '/private/storage/contact-queue',
-            static fn(int $id, string $text): array => (new TelegramClient((string) $config['telegram']['token']))->sendMessage($id, $text));
+            static fn(int $id, string $text, ?array $markup): array => (new TelegramClient((string) $config['telegram']['token']))->sendMessage($id, $text, $markup));
     } catch (Throwable $exception) {
         error_log('MIR AUTO contact queue: ' . get_class($exception));
     }
