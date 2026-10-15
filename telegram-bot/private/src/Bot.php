@@ -124,6 +124,23 @@ final class Bot
         $sessionStep = (string) ($session['step'] ?? '');
         $sessionDraft = is_array($session['draft'] ?? null) ? $session['draft'] : [];
 
+        if ($sessionStep === 'edit_description') {
+            if ($forwarded || !empty($message['photo']) || $text === '' || str_starts_with($text, '/')) {
+                $this->queueMessage($chatId, 'Пришлите новый текст описания обычным сообщением или нажмите «Вернуться к предпросмотру».');
+                return;
+            }
+            require_once __DIR__ . '/DraftDescription.php';
+            try {
+                $edited = DraftDescription::replace($sessionDraft, $text);
+            } catch (InvalidArgumentException $exception) {
+                $this->queueMessage($chatId, $exception->getMessage());
+                return;
+            }
+            $this->database->saveSession($userId, $chatId, 'confirm', $edited);
+            $this->showPreview($chatId, $edited, false);
+            return;
+        }
+
         // Text commands provide a fallback when Telegram clients do not deliver
         // inline-keyboard callbacks promptly or the button cannot be tapped.
         if ($session !== null && in_array($sessionStep, ['import_photos', 'import_missing'], true)) {
@@ -665,7 +682,7 @@ final class Bot
             return;
         }
         if ($action === 'cancel_publish' && $session !== null
-            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing', 'confirm', 'import_processing'], true)) {
+            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing', 'confirm', 'import_processing', 'edit_description'], true)) {
             $this->discardDraftPhotos($session['draft'] ?? []);
             $this->database->deleteSession($userId);
             $this->answerCallbackSafely($callbackId, 'Импорт отменён.');
@@ -692,6 +709,21 @@ final class Bot
                 );
                 return;
             }
+        }
+        if ($action === 'cancel_description_edit' && ($session['step'] ?? '') === 'edit_description') {
+            $this->database->saveSession($userId, $chatId, 'confirm', $session['draft']);
+            $this->answerCallbackSafely($callbackId, 'Описание не изменено.');
+            $this->showPreview($chatId, $session['draft'], false);
+            return;
+        }
+        if ($action === 'edit_draft_description' && ($session['step'] ?? '') === 'confirm') {
+            $this->database->saveSession($userId, $chatId, 'edit_description', $session['draft']);
+            $this->answerCallbackSafely($callbackId, 'Пришлите новое описание.');
+            $this->queueMessage($chatId, "Отправьте новый текст для блока «Комплектация» одним сообщением (до 1200 символов). Фото и характеристики сохранятся.\n\nТекущее описание:\n"
+                . $this->escape((string) ($session['draft']['description'] ?? 'Не указано')), [
+                    'inline_keyboard' => [[['text' => 'Вернуться к предпросмотру', 'callback_data' => 'cancel_description_edit']]],
+                ]);
+            return;
         }
         if ($session === null || ($session['step'] ?? '') !== 'confirm') {
             $this->answerCallbackSafely($callbackId, 'Черновик уже обработан.');
@@ -854,7 +886,13 @@ final class Bot
         unset($draft['publish_retry_after']);
     }
 
-    private function showPreview(int $chatId, array $draft): void
+    private function queueMessage(int $chatId, string $text, ?array $markup = null): void
+    {
+        require_once __DIR__ . '/ContactDeliveryQueue.php';
+        ContactDeliveryQueue::enqueue(dirname(__DIR__) . '/storage/contact-queue', [$chatId], $text, $markup);
+    }
+
+    private function showPreview(int $chatId, array $draft, bool $sendPhotos = true): void
     {
         $price = isset($draft['price_rub']) && $draft['price_rub'] !== null
             ? number_format((int) $draft['price_rub'], 0, ',', ' ') . ' ₽'
@@ -882,19 +920,20 @@ final class Bot
             . "\n\nПроверьте данные. После публикации карточка попадёт в базу каталога.";
 
         if (!empty($draft['description'])) {
-            $text .= "\n\nКомплектация: " . $this->escape(mb_substr((string) $draft['description'], 0, 700));
+            $text .= "\n\nКомплектация: " . $this->escape(mb_substr((string) $draft['description'], 0, 1200));
         }
 
         $fileIds = array_values(array_filter(array_map('strval', $draft['preview_file_ids'] ?? [])));
-        if (count($fileIds) === 1) {
+        if ($sendPhotos && count($fileIds) === 1) {
             $this->telegram->sendPhoto($chatId, $fileIds[0], 'Фото из пересланной публикации');
-        } elseif (count($fileIds) > 1) {
+        } elseif ($sendPhotos && count($fileIds) > 1) {
             $media = array_map(static fn (string $id): array => ['type' => 'photo', 'media' => $id], $fileIds);
             $this->telegram->sendMediaGroup($chatId, $media);
         }
 
-        $this->telegram->sendMessage($chatId, $text, [
+        $this->queueMessage($chatId, $text, [
             'inline_keyboard' => [
+                [['text' => 'Изменить описание комплектации', 'callback_data' => 'edit_draft_description']],
                 [
                     ['text' => 'Опубликовать', 'callback_data' => 'publish_car'],
                     ['text' => 'Отменить', 'callback_data' => 'cancel_publish'],
