@@ -102,4 +102,8 @@ if (isset($electric['mileage_km']) || !str_contains($electric['notes'] ?? '', '�
 }
 $zero = TelegramCarPostParser::parse("Haval H6\nПробег: 0 км\nЗапас хода: 506 км");
 if (($zero['mileage_km'] ?? null) !== 0) { fwrite(STDERR, 'FAIL explicit zero mileage.' . PHP_EOL); exit(1); }
-echo "Parser tests passed: factual fields, electric models, range/mileage separation, descriptions, prices and status." . PHP_EOL;
+foreach (['1.4L', '1.4l', '1,4 л'] as $litres) {
+    $verna = TelegramCarPostParser::parse("Hyundai Verna\n- {$litres} (100 л.с.)");
+    if (($verna['engine'] ?? '') !== '1.4 л') { fwrite(STDERR, 'FAIL litre engine parsing' . PHP_EOL); exit(1); }
+}
+echo "Parser tests passed: factual fields, electric models, litre units, range/mileage separation, descriptions, prices and status." . PHP_EOL;

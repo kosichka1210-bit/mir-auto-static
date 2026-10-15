@@ -184,7 +184,7 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
-    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=polished-facts-8', text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=engine-units-9', text)
     text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=polished-facts-8', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./|/)?#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -241,11 +241,11 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     source = re.sub(r'    const facts = \[.*?\]\.filter\(Boolean\);', '''    const facts = [
       car.year || 'Год не указан',
       car.mileage_km != null ? `${number(car.mileage_km)} км` : (/новое авто/i.test(car.notes || '') ? 'Новое авто' : 'Пробег не указан'),
-      car.engine || '—',
+      car.engine || '',
       car.power || 'Мощность не указана',
       car.transmission || 'Коробка не указана'
     ];''', source, count=1, flags=re.S)
-    source = source.replace("facts.map(text).join(' · ')", "facts.map((value, index) => `<span class=\"car-spec-item\" title=\"${text(['Год', 'Пробег', 'Двигатель', 'Мощность', 'Коробка'][index])}: ${text(value)}\">${text(value)}</span>`).join(' ')")
+    source = source.replace("facts.map(text).join(' · ')", "facts.filter(Boolean).map(value => `<span class=\"car-spec-item\">${text(value)}</span>`).join(' ')")
     source = source.replace("const contact = new URL('#form', siteRoot).href;", "const contact = new URL('#contacts', siteRoot).href;")
     source = source.replace("const API = 'https://bot.mir-auto-china.ru/api/cars.php';", "const API = new URL('/api/cars.php', location.origin).href;")
     source = source.replace('  const controller = new AbortController();\n  const timeout = window.setTimeout(() => controller.abort(), 6000);', '''  let timeout;

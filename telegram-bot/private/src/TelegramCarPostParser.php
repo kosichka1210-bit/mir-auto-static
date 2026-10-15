@@ -113,8 +113,9 @@ final class TelegramCarPostParser
             elseif (preg_match('/в\s+наличии/ui', $text) === 1) $draft['status'] = 'В наличии';
         }
 
-        if (empty($draft['engine']) && preg_match('/\b(\d(?:[.,]\d)?\s*(?:T|Т|Turbo|л(?:итр(?:а|ов)?)?))\b/ui', $text, $match) === 1) {
+        if (empty($draft['engine']) && preg_match('/\b(\d(?:[.,]\d)?\s*(?:T|Т|Turbo|L|л(?:итр(?:а|ов)?)?))\b/ui', $text, $match) === 1) {
             $draft['engine'] = preg_replace('/\s+/u', '', str_replace(',', '.', trim($match[1])));
+            $draft['engine'] = preg_replace('/[Lл]$/ui', ' л', $draft['engine']);
         }
         if (empty($draft['power']) && preg_match('/\b(\d{2,3})\s*(?:л\.?\s*с\.?|лс|hp)\b/ui', $text, $match) === 1) {
             $draft['power'] = $match[1] . ' л.с.';
