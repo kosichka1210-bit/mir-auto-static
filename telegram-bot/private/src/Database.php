@@ -239,6 +239,16 @@ final class Database
         $this->pdo->beginTransaction();
 
         try {
+            $publicationKey = (string) ($draft['publication_key'] ?? '');
+            if ($publicationKey !== '') {
+                if (preg_match('/^[a-f0-9]{32}$/', $publicationKey) !== 1) throw new RuntimeException('Invalid publication key');
+                $receipt = $this->pdo->prepare('SELECT c.id,c.slug FROM bot_publication_receipts r JOIN cars c ON c.id=r.car_id WHERE r.publication_key=:key');
+                $receipt->execute(['key' => $publicationKey]);
+                if ($published = $receipt->fetch()) {
+                    $this->pdo->commit();
+                    return $published + ['images' => []];
+                }
+            }
             $slug = $this->makeSlug(
                 (string) $draft['brand'] . '-' . (string) $draft['model'] . '-' . (string) $draft['year']
             );
@@ -297,7 +307,7 @@ final class Database
                 $targetName = sprintf('%02d.jpg', $index + 1);
                 $targetPath = $carMediaDir . DIRECTORY_SEPARATOR . $targetName;
 
-                if (!rename($sourcePath, $targetPath)) {
+                if (!copy($sourcePath, $targetPath)) {
                     throw new RuntimeException('Не удалось перенести фотографию в каталог.');
                 }
 
@@ -310,8 +320,12 @@ final class Database
                 $publicPaths[] = $relativePath;
             }
 
+            if ($publicationKey !== '') {
+                $receipt = $this->pdo->prepare('INSERT INTO bot_publication_receipts(publication_key,car_id) VALUES(:key,:id)');
+                $receipt->execute(['key' => $publicationKey, 'id' => $carId]);
+            }
             $this->pdo->commit();
-
+            foreach ($draft['images'] ?? [] as $sourcePath) { if (is_file($sourcePath)) @unlink($sourcePath); }
             return ['id' => $carId, 'slug' => $slug, 'images' => $publicPaths];
         } catch (Throwable $exception) {
             if ($this->pdo->inTransaction()) {

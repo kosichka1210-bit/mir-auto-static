@@ -17,6 +17,7 @@ foreach ([$queueDir, $doneDir, $failedDir] as $directory) {
     @chmod($directory, 0700);
 }
 
+$nextPublicationScan = 0;
 while (true) {
     try {
         ContactDeliveryQueue::processOne($botRoot . '/private/storage/contact-queue',
@@ -112,6 +113,15 @@ while (true) {
         }
     }
 
+    if (time() >= $nextPublicationScan) {
+        $nextPublicationScan = time() + 2;
+        try {
+            $database = new Database($config['database']);
+            (new Bot(new TelegramClient((string) $config['telegram']['token']), $database, $config))->resumePendingPublications();
+        } catch (Throwable $exception) {
+            error_log('MIR AUTO publication retry: ' . get_class($exception));
+        }
+    }
     if (!$processed) {
         usleep(250_000);
     }

@@ -111,6 +111,10 @@ final class Bot
 
         if ($command === '/publish') {
             $session = $this->database->getSession($userId);
+            if (in_array((string) ($session['step'] ?? ''), ['publish_retry', 'publishing'], true)) {
+                $this->queueMessage($chatId, 'Публикация уже выполняется автоматически. Повторять /publish не нужно.');
+                return;
+            }
             if ($session === null || ($session['step'] ?? '') !== 'confirm') {
                 $this->telegram->sendMessage($chatId, 'Нет готового предпросмотра для публикации. Сначала перешлите пост и дождитесь предпросмотра.');
                 return;
@@ -682,7 +686,7 @@ final class Bot
             return;
         }
         if ($action === 'cancel_publish' && $session !== null
-            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing', 'confirm', 'import_processing', 'edit_description'], true)) {
+            && in_array((string) ($session['step'] ?? ''), ['import_photos', 'import_missing', 'confirm', 'import_processing', 'edit_description', 'publish_retry'], true)) {
             $this->discardDraftPhotos($session['draft'] ?? []);
             $this->database->deleteSession($userId);
             $this->answerCallbackSafely($callbackId, 'Импорт отменён.');
@@ -757,7 +761,7 @@ final class Bot
             return;
         }
 
-        $claimed = $this->database->claimSessionStep($userId, ['confirm'], 'publishing');
+        $claimed = $this->database->claimSessionStep($userId, ['confirm', 'publish_retry'], 'publishing');
         if ($claimed === null) {
             if ($callbackId !== null) {
                 $this->answerCallbackSafely($callbackId, 'Публикация уже обрабатывается.');
@@ -765,13 +769,17 @@ final class Bot
             return;
         }
         $draft = $claimed['draft'];
+        $resuming = !empty($draft['publication_confirmed_at']);
+        $draft['publication_confirmed_at'] ??= time();
+        $draft['publication_key'] ??= bin2hex(random_bytes(16));
+        $this->database->saveSession($userId, $chatId, 'publishing', $draft);
         if ($callbackId !== null) {
             $this->answerCallbackSafely($callbackId, 'Сохраняю автомобиль и фотографии.');
         }
         // Status delivery is best effort: Telegram transport must not prevent
         // a confirmed publication or leave its session stuck in publishing.
         try {
-            $this->telegram->sendMessage($chatId, 'Подтверждение получено. Сохраняю автомобиль и фотографии…');
+            if (!$resuming) $this->queueMessage($chatId, 'Подтверждение получено. Сохраняю автомобиль и фотографии…');
         } catch (Throwable $exception) {
             TelegramClient::logPerformance('publish_progress_notification_error', [
                 'error_class' => get_class($exception),
@@ -795,20 +803,23 @@ final class Bot
         } catch (Throwable $exception) {
             // Keep the retry gate short: a transient file API timeout should
             // not force the user to wait through a long cooldown.
-            $draft['publish_retry_after'] = time() + 3;
-            $this->database->saveSession($userId, $chatId, 'confirm', $draft);
+            $draft['publication_attempts'] = (int) ($draft['publication_attempts'] ?? 0) + 1;
+            $draft['publish_retry_after'] = time() + min(60, 5 * $draft['publication_attempts']);
+            $notify = empty($draft['publication_retry_notice']);
+            $draft['publication_retry_notice'] = true;
+            $this->database->saveSession($userId, $chatId, 'publish_retry', $draft);
             TelegramClient::logPerformance('car_publish_error', [
                 'error_class' => get_class($exception),
                 'photo_count' => count($draft['photo_file_ids'] ?? []),
             ]);
-            $this->telegram->sendMessage($chatId, 'Не удалось сохранить автомобиль. Черновик и уже загруженные фотографии сохранены; попробуйте /publish ещё раз позже.');
+            if ($notify) $this->queueMessage($chatId, 'Загрузка временно прервалась. Фото сохранены, продолжу автоматически — повторно нажимать «Опубликовать» не нужно.');
             return;
         }
         // A notification failure must never restore an already published draft.
         try {
-            $this->telegram->sendMessage(
+            $this->queueMessage(
                 $chatId,
-                '<b>Автомобиль опубликован.</b>\nID: ' . $result['id'] . '\nАдрес карточки: <code>' . htmlspecialchars($result['slug']) . '</code>',
+                "<b>Автомобиль опубликован.</b>\nID: " . $result['id'] . "\nАдрес карточки: <code>" . htmlspecialchars($result['slug']) . '</code>',
                 self::homeKeyboard()
             );
         } catch (Throwable $exception) {
@@ -816,6 +827,21 @@ final class Bot
                 'error_class' => get_class($exception),
                 'car_id' => $result['id'],
             ]);
+        }
+    }
+
+    public function resumePendingPublications(): void
+    {
+        $rows = $this->database->pdo()->query("SELECT user_id FROM bot_sessions WHERE step='publish_retry' OR (step='publishing' AND updated_at < DATE_SUB(CURRENT_TIMESTAMP, INTERVAL 120 SECOND))")->fetchAll(PDO::FETCH_COLUMN);
+        foreach ($rows as $id) {
+            if (!$this->isAllowed((int) $id)) continue;
+            $session = $this->database->getSession((int) $id);
+            if (!$session || empty($session['draft']['publication_confirmed_at']) || (int) ($session['draft']['publish_retry_after'] ?? 0) > time()) continue;
+            if ($session['step'] === 'publishing') {
+                $this->database->saveSession((int) $id, (int) $session['chat_id'], 'publish_retry', $session['draft']);
+            }
+            $this->publishConfirmedDraft((int) $session['chat_id'], (int) $id, $session, null);
+            break;
         }
     }
 
