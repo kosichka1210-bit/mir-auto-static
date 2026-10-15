@@ -194,7 +194,20 @@ final class TelegramClient
         ]);
     }
 
-    private function request(string $method, array $payload): array
+    public function pollUpdates(int $offset): array
+    {
+        return $this->request('getUpdates', [
+            'offset' => $offset, 'timeout' => 20, 'limit' => 100,
+            'allowed_updates' => '["message","callback_query"]',
+        ], 25);
+    }
+
+    public function disableWebhookPreservingUpdates(): array
+    {
+        return $this->request('deleteWebhook', ['drop_pending_updates' => 'false']);
+    }
+
+    private function request(string $method, array $payload, int $timeout = 5): array
     {
         $body = false;
         $status = 0;
@@ -212,7 +225,7 @@ final class TelegramClient
                 CURLOPT_RETURNTRANSFER => true,
                 CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
                 CURLOPT_CONNECTTIMEOUT => 1,
-                CURLOPT_TIMEOUT => 5,
+                CURLOPT_TIMEOUT => $timeout,
                 CURLOPT_RESOLVE => ['api.telegram.org:443:' . self::PREFERRED_API_IPV4],
             ]);
             $body = curl_exec($curl);
