@@ -131,8 +131,7 @@ try {
     };
     $saveState(false);
 
-    // The administrator is the required destination; approved staff are
-    // notified best-effort. Destinations always come from private config.
+    // All recipients receive durable delivery jobs from private configuration.
     $contactConfig = require $privateDir . '/contact-config.php';
     $adminRecipientIds = array_values(array_unique(array_filter(array_map(
         'intval', $contactConfig['recipient_ids'] ?? []
@@ -155,32 +154,9 @@ try {
         . "Источник: сайт MIR AUTO\n"
         . 'Дата и время: ' . $now->format('d.m.Y H:i');
 
-    $adminSent = 0;
-    $telegram = new TelegramClient((string) $config['telegram']['token']);
-    foreach ($recipientIds as $recipientId) {
-        if ($recipientId <= 0) {
-            continue;
-        }
-        $isAdminRecipient = in_array($recipientId, $adminRecipientIds, true);
-        try {
-            $result = $telegram->sendMessage($recipientId, $message);
-            error_log('MIR AUTO contact: delivered message_id=' . (int) ($result['result']['message_id'] ?? 0));
-            if ($isAdminRecipient) {
-                $adminSent++;
-            }
-        } catch (Throwable $exception) {
-            $reason = str_replace((string) $config['telegram']['token'], '[redacted]', $exception->getMessage());
-            $reason = preg_replace('/\b\d{7,}\b/u', '[id]', $reason) ?? 'delivery error';
-            $reason = preg_replace('/[^\p{L}\p{N} _:-]/u', ' ', $reason) ?? 'delivery error';
-            $reason = mb_substr(trim($reason), 0, 140);
-            error_log('MIR AUTO contact: delivery failed role=' . ($isAdminRecipient ? 'admin' : 'staff') . ' reason=' . ($reason !== '' ? $reason : 'unknown'));
-        }
-    }
-
-    if ($adminSent !== count($adminRecipientIds)) {
-        throw new RuntimeException('Не удалось доставить заявку.');
-    }
-
+    require_once $privateDir . '/src/ContactDeliveryQueue.php';
+    ContactDeliveryQueue::enqueue($privateDir . '/storage/contact-queue', $recipientIds, $message);
+    // The complete recipient list is durable before the browser sees success.
     $saveState(true);
     flock($lock, LOCK_UN);
     fclose($lock);

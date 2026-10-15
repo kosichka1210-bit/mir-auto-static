@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 $botRoot = dirname(__DIR__, 2);
 $config = require $botRoot . '/private/src/bootstrap.php';
+require_once $botRoot . '/private/src/ContactDeliveryQueue.php';
 $queueDir = $botRoot . '/private/storage/update-queue';
 $doneDir = $queueDir . '/done';
 $failedDir = $queueDir . '/failed';
@@ -17,6 +18,12 @@ foreach ([$queueDir, $doneDir, $failedDir] as $directory) {
 }
 
 while (true) {
+    try {
+        ContactDeliveryQueue::processOne($botRoot . '/private/storage/contact-queue',
+            static fn(int $id, string $text): array => (new TelegramClient((string) $config['telegram']['token']))->sendMessage($id, $text));
+    } catch (Throwable $exception) {
+        error_log('MIR AUTO contact queue: ' . get_class($exception));
+    }
     foreach (glob($queueDir . '/*.json.processing') ?: [] as $staleProcessing) {
         if (filemtime($staleProcessing) !== false && filemtime($staleProcessing) < time() - 60) {
             @rename($staleProcessing, substr($staleProcessing, 0, -strlen('.processing')));
