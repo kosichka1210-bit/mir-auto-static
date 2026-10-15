@@ -184,8 +184,8 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
-    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=compact-facts-7', text)
-    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=compact-facts-7', text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=polished-facts-8', text)
+    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=polished-facts-8', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./|/)?#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
         text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -241,10 +241,11 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     source = re.sub(r'    const facts = \[.*?\]\.filter\(Boolean\);', '''    const facts = [
       car.year || 'Год не указан',
       car.mileage_km != null ? `${number(car.mileage_km)} км` : (/новое авто/i.test(car.notes || '') ? 'Новое авто' : 'Пробег не указан'),
-      car.engine || 'Двигатель не указан',
+      car.engine || '—',
       car.power || 'Мощность не указана',
       car.transmission || 'Коробка не указана'
     ];''', source, count=1, flags=re.S)
+    source = source.replace("facts.map(text).join(' · ')", "facts.map((value, index) => `<span class=\"car-spec-item\" title=\"${text(['Год', 'Пробег', 'Двигатель', 'Мощность', 'Коробка'][index])}: ${text(value)}\">${text(value)}</span>`).join(' ')")
     source = source.replace("const contact = new URL('#form', siteRoot).href;", "const contact = new URL('#contacts', siteRoot).href;")
     source = source.replace("const API = 'https://bot.mir-auto-china.ru/api/cars.php';", "const API = new URL('/api/cars.php', location.origin).href;")
     source = source.replace('  const controller = new AbortController();\n  const timeout = window.setTimeout(() => controller.abort(), 6000);', '''  let timeout;
@@ -299,6 +300,13 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
 .catalog-card-actions .arrow-link::before,.catalog-card-actions .arrow-link::after{content:none!important;display:none!important}
 .catalog-card-actions .arrow-link b{display:none}
 @media(max-width:360px){.live-car-card .car-copy{padding:18px}.live-car-card h3{font-size:24px}.live-car-card .catalog-card-actions .button{font-size:13px}}
+.catalog-grid .live-car-card .car-copy,.car-grid .live-car-card .car-copy{min-height:0;padding:24px;gap:0}
+.catalog-grid .live-car-card .car-top,.car-grid .live-car-card .car-top{min-height:32px}
+.catalog-grid .live-car-card h3,.car-grid .live-car-card h3{margin:18px 0 12px}
+.catalog-grid .live-car-card .car-specs,.car-grid .live-car-card .car-specs{display:flex;flex-wrap:wrap;align-content:flex-start;align-items:baseline;gap:4px 8px;min-height:52px;margin:0 0 20px;font:400 15px/24px Manrope,Arial,sans-serif;color:#c7c3ce}
+.car-spec-item{display:inline-flex;align-items:baseline;white-space:nowrap;max-width:100%}
+.car-spec-item:not(:last-child)::after{content:'·';margin-left:8px;color:#77717f}
+@media(max-width:360px){.catalog-grid .live-car-card .car-copy,.car-grid .live-car-card .car-copy{padding:20px}.catalog-grid .live-car-card .car-specs,.car-grid .live-car-card .car-specs{font-size:14px}}
 ''', encoding="utf-8")
 
 
