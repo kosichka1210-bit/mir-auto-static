@@ -734,8 +734,15 @@ final class Bot
         $draft = $claimed['draft'];
         if ($callbackId !== null) {
             $this->answerCallbackSafely($callbackId, 'Сохраняю автомобиль и фотографии.');
-        } else {
+        }
+        // Status delivery is best effort: Telegram transport must not prevent
+        // a confirmed publication or leave its session stuck in publishing.
+        try {
             $this->telegram->sendMessage($chatId, 'Подтверждение получено. Сохраняю автомобиль и фотографии…');
+        } catch (Throwable $exception) {
+            TelegramClient::logPerformance('publish_progress_notification_error', [
+                'error_class' => get_class($exception),
+            ]);
         }
         try {
             $photoCount = count(array_unique(array_map('strval', $draft['photo_file_ids'] ?? [])));
@@ -744,7 +751,6 @@ final class Bot
                 static fn ($path): bool => is_string($path) && is_file($path)
             ));
             if ($readyPhotoCount < $photoCount && $photoCount > 0) {
-                $this->telegram->sendMessage($chatId, 'Подтверждение получено. Сохраняю автомобиль и загружаю ' . $photoCount . ' фотографий…');
                 $this->downloadForwardPhotos($userId, $chatId, $draft);
             }
             $result = $this->database->publishCar(
