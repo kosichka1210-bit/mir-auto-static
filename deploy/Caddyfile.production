@@ -23,15 +23,15 @@ mir-auto-china.ru {
 	rewrite @sitemap /api/sitemap.php
 	@noDynamic {
 		path /api/* /bot/*
-		not path /api/vehicle.php /api/sitemap.php
+		not path /api/vehicle.php /api/sitemap.php /api/cars.php
 	}
 	respond @noDynamic 404
 	@blockedPHP {
 		path_regexp php \.php(?:$|/)
-		not path /api/vehicle.php /api/sitemap.php
+		not path /api/vehicle.php /api/sitemap.php /api/cars.php
 	}
 	respond @blockedPHP 404
-	@sitePHP path /api/vehicle.php /api/sitemap.php
+	@sitePHP path /api/vehicle.php /api/sitemap.php /api/cars.php
 	php_fastcgi @sitePHP unix//run/php/php8.5-fpm.sock
 	file_server
 }

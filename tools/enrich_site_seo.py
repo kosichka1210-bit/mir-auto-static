@@ -128,6 +128,8 @@ def page_graph(kind: str, title: str, description: str, canonical: str, image: s
 def enrich(page: Path, root: Path) -> None:
     relative = page.relative_to(root).as_posix()
     text = page.read_text(encoding="utf-8")
+    text = re.sub(r'<p\b[^>]*>Цены опубликованы для Владивостока\..*?</p>', '<p class="catalogue-note">Актуальность предложения и детали покупки уточняйте у представителей.</p>', text, flags=re.S)
+    text = re.sub(r'<p\b[^>]*>Стоимость указана по опубликованным материалам для Владивостока.*?</p>', '<p class="catalogue-note">Актуальность предложения и детали покупки уточняйте у представителей.</p>', text, flags=re.S)
     if relative == "index.html":
         kind = "home"
         text = text.replace('<section class="contact-section" id="form">', '<section class="contact-section" id="contact-section">')
@@ -181,7 +183,7 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
-    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=contact-anchors-4', text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=catalog-retry-5', text)
     text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=contact-anchors-3', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -234,11 +236,31 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     source = source.replace('Подробнее <b>↗</b>', 'Подробнее')
     source = source.replace("car.mileage_km ? `${number(car.mileage_km)} км` : ''", "car.mileage_km != null ? `${number(car.mileage_km)} км` : 'Пробег не указан'")
     source = source.replace("facts.slice(0, 3).map(text)", "facts.map(text)")
+    source = source.replace("const contact = new URL('#form', siteRoot).href;", "const contact = new URL('#contacts', siteRoot).href;")
+    source = source.replace("const API = 'https://bot.mir-auto-china.ru/api/cars.php';", "const API = new URL('/api/cars.php', location.origin).href;")
+    source = source.replace('  const controller = new AbortController();\n  const timeout = window.setTimeout(() => controller.abort(), 6000);', '''  let timeout;
+  async function loadCatalog() {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const controller = new AbortController();
+      timeout = window.setTimeout(() => controller.abort(), 5000);
+      try {
+        const response = await fetch(API, {headers:{Accept:'application/json'},signal:controller.signal,cache:'no-store'});
+        if (response.ok) return response;
+        if (response.status < 500 && response.status !== 429) throw new Error('catalog unavailable');
+      } catch (error) { if (attempt === 2) throw error; }
+      finally { window.clearTimeout(timeout); }
+      loading.textContent = 'Соединение прервалось. Повторяем загрузку…';
+    }
+    throw new Error('catalog unavailable');
+  }''')
+    source = source.replace("fetch(API, { headers: { Accept: 'application/json' }, signal: controller.signal })", 'loadCatalog()')
+    source = source.replace("Каталог временно недоступен. Попробуйте обновить страницу позже.", 'Не удалось загрузить предложения из-за ошибки соединения. Попробуйте ещё раз.')
+    source = source.replace(".catch(() => { grid.innerHTML = '<p class=\"catalog-state\">Не удалось загрузить предложения из-за ошибки соединения. Попробуйте ещё раз.</p>'; })", ".catch(() => { grid.innerHTML = '<div class=\"catalog-state\" role=\"status\"><p>Не удалось загрузить предложения из-за ошибки соединения.</p><button class=\"button\" type=\"button\">Повторить загрузку</button></div>'; grid.querySelector('button').addEventListener('click', () => location.reload()); })")
     if 'anchorUserScrolled' not in source:
-        source = source.replace('  const controller = new AbortController();', '''  const initialAnchor = location.hash;
+        source = source.replace('  let timeout;', '''  const initialAnchor = location.hash;
   let anchorUserScrolled = false;
   ['wheel','touchstart','keydown'].forEach(type => window.addEventListener(type, () => { anchorUserScrolled = true; }, {once:true,passive:true}));
-  const controller = new AbortController();''')
+  let timeout;''')
         source = source.replace('.finally(() => window.clearTimeout(timeout));', '''.finally(() => {
       window.clearTimeout(timeout);
       if (!anchorUserScrolled && location.hash === initialAnchor && ['#form','#contacts'].includes(initialAnchor)) {
