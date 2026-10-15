@@ -134,7 +134,8 @@ def enrich(page: Path, root: Path) -> None:
         kind = "home"
         text = text.replace('<section class="contact-section" id="form">', '<section class="contact-section" id="contact-section">')
         text = text.replace('<form class="request-form">', '<form class="request-form" id="form">')
-        text = text.replace('<div class="contact-directory">', '<div class="contact-directory" id="contacts">')
+        text = text.replace('<div class="contact-directory" id="contacts">', '<div class="contact-directory">')
+        text = text.replace('<div class="contact-copy">', '<div class="contact-copy" id="contacts">')
         text = re.sub(r'href="#form"(>\s*(?:Контакты|Связаться с представителями)\s*</a>)', r'href="#contacts"\1', text)
         title, description, canonical = HOME_TITLE, HOME_DESCRIPTION, f"{SITE}/"
         image = f"{SITE}/og.png"
