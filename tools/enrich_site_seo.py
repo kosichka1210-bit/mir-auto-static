@@ -186,6 +186,7 @@ def enrich(page: Path, root: Path) -> None:
     text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=catalog-retry-5', text)
     text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=contact-anchors-3', text)
     if kind != 'home':
+        text = re.sub(r'href="(?:\.\./|/)?#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
         text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
         text = re.sub(r'href="/#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
     if kind == "home":
