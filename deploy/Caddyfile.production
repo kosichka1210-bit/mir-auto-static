@@ -19,21 +19,23 @@ mir-auto-china.ru {
 	encode zstd gzip
 	@cardPreviews path_regexp cardPreviews \.jpg\.(480|800)\.webp$
 	header @cardPreviews Cache-Control "public, max-age=604800"
+	@catalogue path /avtomobili/
+	rewrite @catalogue /api/catalogue.php
 	@vehiclePage path_regexp vehiclePage ^/avtomobili/([a-z0-9-]+)/?$
 	rewrite @vehiclePage /api/vehicle.php?slug={re.vehiclePage.1}
 	@sitemap path /sitemap.xml
 	rewrite @sitemap /api/sitemap.php
 	@noDynamic {
 		path /api/* /bot/*
-		not path /api/vehicle.php /api/sitemap.php /api/cars.php
+		not path /api/vehicle.php /api/sitemap.php /api/cars.php /api/catalogue.php
 	}
 	respond @noDynamic 404
 	@blockedPHP {
 		path_regexp php \.php(?:$|/)
-		not path /api/vehicle.php /api/sitemap.php /api/cars.php
+		not path /api/vehicle.php /api/sitemap.php /api/cars.php /api/catalogue.php
 	}
 	respond @blockedPHP 404
-	@sitePHP path /api/vehicle.php /api/sitemap.php /api/cars.php
+	@sitePHP path /api/vehicle.php /api/sitemap.php /api/cars.php /api/catalogue.php
 	php_fastcgi @sitePHP unix//run/php/php8.5-fpm.sock
 	file_server
 }

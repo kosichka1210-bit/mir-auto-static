@@ -12,6 +12,7 @@ header('Cache-Control: public, max-age=300, stale-while-revalidate=300');
 
 $baseUrl = 'https://mir-auto-china.ru';
 $urls = [$baseUrl . '/', $baseUrl . '/avtomobili/'];
+$modified = [];
 $publicRoot = dirname(__DIR__);
 foreach (glob($publicRoot . '/avtomobili/*/index.html') ?: [] as $page) {
     $slug = basename(dirname($page));
@@ -23,11 +24,12 @@ foreach (glob($publicRoot . '/avtomobili/*/index.html') ?: [] as $page) {
 try {
     $config = require dirname(__DIR__, 2) . '/private/src/bootstrap.php';
     $database = new Database($config['database']);
-    $statement = $database->pdo()->query('SELECT slug FROM cars WHERE published_at IS NOT NULL');
-    foreach ($statement->fetchAll(PDO::FETCH_COLUMN) as $slug) {
-        $slug = (string) $slug;
+    $statement = $database->pdo()->query('SELECT slug, updated_at FROM cars WHERE published_at IS NOT NULL');
+    foreach ($statement->fetchAll() as $car) {
+        $slug = (string) $car['slug'];
         if (preg_match('/^[a-z0-9-]{1,150}$/', $slug) === 1) {
             $urls[] = $baseUrl . '/avtomobili/' . rawurlencode($slug) . '/';
+            $modified[$baseUrl . '/avtomobili/' . rawurlencode($slug) . '/'] = gmdate(DATE_ATOM, strtotime($car['updated_at'] . ' UTC'));
         }
     }
 } catch (Throwable $exception) {
@@ -41,6 +43,8 @@ $urls = array_values(array_unique($urls));
 echo '<?xml version="1.0" encoding="UTF-8"?>';
 echo '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
 foreach ($urls as $url) {
-    echo '<url><loc>' . htmlspecialchars($url, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</loc></url>';
+    echo '<url><loc>' . htmlspecialchars($url, ENT_XML1 | ENT_QUOTES, 'UTF-8') . '</loc>';
+    if (isset($modified[$url])) echo '<lastmod>' . $modified[$url] . '</lastmod>';
+    echo '</url>';
 }
 echo '</urlset>';
