@@ -231,10 +231,6 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     const image = imageUrl(previews['480'] || (Array.isArray(car.images) ? car.images[0] : ''));
     const responsive = previews['480'] && previews['800'] ? `srcset="${escapeHtml(imageUrl(previews['480']))} 480w, ${escapeHtml(imageUrl(previews['800']))} 800w" sizes="(max-width:600px) calc(100vw - 40px), (max-width:1000px) 46vw, 440px"` : '';''')
     source = source.replace('loading="lazy">', 'loading="lazy" decoding="async" ${responsive}>')
-    source = source.replace('grid.innerHTML =', 'grid.innerHTML =', 1)
-    source = source.replace('grid.innerHTML = cars.map', 'grid.innerHTML = cars.map')
-    # The first visible card must not wait for lazy-image intersection scheduling.
-    source = source.replace(".finally(() => window.clearTimeout(timeout));", ".finally(() => { window.clearTimeout(timeout); const first = grid.querySelector('img'); if (first) { first.loading='eager'; first.fetchPriority='high'; } });")
     source = source.replace(
         "const detailsUrl = new URL(`avtomobili/avtomobil/?slug=${encodeURIComponent(car.slug)}`, siteRoot).href;",
         "const detailsUrl = new URL(`avtomobili/${encodeURIComponent(car.slug)}/`, siteRoot).href;",
@@ -285,6 +281,7 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
         requestAnimationFrame(() => document.querySelector(initialAnchor)?.scrollIntoView({block:'start',behavior:'instant'}));
       }
     });''')
+    source = source.replace("      if (!anchorUserScrolled", "      const first = grid.querySelector('img'); if (first) { first.loading='eager'; first.fetchPriority='high'; }\n      if (!anchorUserScrolled")
     script.write_text(source, encoding="utf-8", newline="")
     stylesheet = root / "style.css"
     css = stylesheet.read_text(encoding="utf-8")
