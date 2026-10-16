@@ -17,6 +17,8 @@ http://bot.mir-auto-china.ru {
 mir-auto-china.ru {
 	root * /srv/mir-auto/current/public_html
 	encode zstd gzip
+	@cardPreviews path_regexp cardPreviews \.jpg\.(480|800)\.webp$
+	header @cardPreviews Cache-Control "public, max-age=604800"
 	@vehiclePage path_regexp vehiclePage ^/avtomobili/([a-z0-9-]+)/?$
 	rewrite @vehiclePage /api/vehicle.php?slug={re.vehiclePage.1}
 	@sitemap path /sitemap.xml
@@ -43,6 +45,8 @@ www.mir-auto-china.ru {
 bot.mir-auto-china.ru {
 	root * /srv/mir-auto/current/public_html
 	encode zstd gzip
+	@cardPreviews path_regexp cardPreviews \.jpg\.(480|800)\.webp$
+	header @cardPreviews Cache-Control "public, max-age=604800"
 	log {
 		output file /var/log/caddy/mir-auto-access.log {
 			roll_size 10MiB

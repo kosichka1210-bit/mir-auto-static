@@ -311,6 +311,11 @@ final class Database
                     throw new RuntimeException('Не удалось перенести фотографию в каталог.');
                 }
 
+                if ($index === 0) {
+                    require_once __DIR__ . '/CardPreview.php';
+                    CardPreview::create($targetPath);
+                }
+
                 $relativePath = '/media/cars/' . rawurlencode($slug) . '/' . $targetName;
                 $imageStatement->execute([
                     'car_id' => $carId,

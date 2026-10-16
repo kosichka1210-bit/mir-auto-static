@@ -57,6 +57,17 @@ try {
             $imageStatement->fetchAll()
         );
         $car['year'] = (int) $car['year'];
+        $car['card_previews'] = [];
+        if (!empty($car['images'][0])) {
+            $original = $car['images'][0];
+            $path = parse_url($original, PHP_URL_PATH);
+            $local = dirname(__DIR__) . $path;
+            foreach ([480, 800] as $width) {
+                if (is_file($local . '.' . $width . '.webp')) {
+                    $car['card_previews'][(string) $width] = $original . '.' . $width . '.webp';
+                }
+            }
+        }
         $car['mileage_km'] = $car['mileage_km'] !== null ? (int) $car['mileage_km'] : null;
         $car['price_rub'] = $car['price_rub'] !== null ? (int) $car['price_rub'] : null;
         $car['id'] = (int) $car['id'];
