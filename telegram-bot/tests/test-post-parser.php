@@ -83,11 +83,15 @@ if ($missing !== ['хотя бы одна фотография']) {
     exit(1);
 }
 $unknownStatus = TelegramCarPostParser::parse("Haval H6\n2022\nЦена: 1 425 000\nСтатус: в пути");
-if (isset($unknownStatus['status']) || !in_array('статус', TelegramCarPostParser::missing($unknownStatus), true)) {
+if (($unknownStatus['status'] ?? null) !== 'В наличии' || in_array('статус', TelegramCarPostParser::missing($unknownStatus), true)) {
     fwrite(STDERR, 'FAIL unknown status must not be guessed: ' . json_encode($unknownStatus['status'] ?? null, JSON_UNESCAPED_UNICODE) . PHP_EOL);
     exit(1);
 }
 $knownStatus = TelegramCarPostParser::parse("Haval H6\n2022\nЦена: 1 425 000\nВ наличии");
+foreach (['' => 'В наличии', 'Под заказ' => 'Под заказ', 'Продано' => 'Продано'] as $textStatus => $expected) {
+    $parsedStatus = TelegramCarPostParser::parse("Haval H6\n2022\nЦена: 1425000\n" . $textStatus);
+    if (($parsedStatus['status'] ?? null) !== $expected) throw new RuntimeException('Availability default/explicit status regression');
+}
 if (($knownStatus['status'] ?? null) !== 'В наличии') {
     fwrite(STDERR, 'FAIL explicit status phrase was not parsed.' . PHP_EOL);
     exit(1);

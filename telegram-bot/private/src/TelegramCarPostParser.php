@@ -111,6 +111,8 @@ final class TelegramCarPostParser
             if (preg_match('/\bпродан(?:а|о)?\b/ui', $text) === 1) $draft['status'] = 'Продано';
             elseif (preg_match('/под\s+заказ/ui', $text) === 1) $draft['status'] = 'Под заказ';
             elseif (preg_match('/в\s+наличии/ui', $text) === 1) $draft['status'] = 'В наличии';
+            // MIR AUTO owner policy: forwarded offers are available unless explicitly sold/on order.
+            else $draft['status'] = 'В наличии';
         }
 
         if (empty($draft['engine']) && preg_match('/\b(\d(?:[.,]\d)?\s*(?:T|Т|Turbo|L|л(?:итр(?:а|ов)?)?))\b/ui', $text, $match) === 1) {
