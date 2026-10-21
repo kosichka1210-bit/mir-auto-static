@@ -128,6 +128,8 @@ def page_graph(kind: str, title: str, description: str, canonical: str, image: s
 def enrich(page: Path, root: Path) -> None:
     relative = page.relative_to(root).as_posix()
     text = page.read_text(encoding="utf-8")
+    text = re.sub(r'<b\b[^>]*>\s*↗\s*</b>', '', text)
+    text = text.replace('↗', '')
     text = re.sub(r'<p\b[^>]*>Цены опубликованы для Владивостока\..*?</p>', '<p class="catalogue-note">Актуальность предложения и детали покупки уточняйте у представителей.</p>', text, flags=re.S)
     text = re.sub(r'<p\b[^>]*>Стоимость указана по опубликованным материалам для Владивостока.*?</p>', '<p class="catalogue-note">Актуальность предложения и детали покупки уточняйте у представителей.</p>', text, flags=re.S)
     if relative == "index.html":
@@ -184,7 +186,7 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "property", "og:locale", "ru_RU")
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
-    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=responsive-photos-10', text)
+    text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=compact-cards-11', text)
     text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=polished-facts-8', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./|/)?#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -250,6 +252,8 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
       car.transmission || 'Коробка не указана'
     ];''', source, count=1, flags=re.S)
     source = source.replace("facts.map(text).join(' · ')", "facts.filter(Boolean).map(value => `<span class=\"car-spec-item\">${text(value)}</span>`).join(' ')")
+    source = re.sub(r'\$\{facts\.length \? `<p class="car-specs">.*?</p>` : \'\'\}', '', source, count=1, flags=re.S)
+    source = source.replace('class="arrow-link button"', 'class="button"')
     source = source.replace("const contact = new URL('#form', siteRoot).href;", "const contact = new URL('#contacts', siteRoot).href;")
     source = source.replace("const API = 'https://bot.mir-auto-china.ru/api/cars.php';", "const API = new URL('/api/cars.php', location.origin).href;")
     source = source.replace('  const controller = new AbortController();\n  const timeout = window.setTimeout(() => controller.abort(), 6000);', '''  let timeout;
@@ -285,6 +289,9 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
     script.write_text(source, encoding="utf-8", newline="")
     stylesheet = root / "style.css"
     css = stylesheet.read_text(encoding="utf-8")
+    if '/* compact public cards */' not in css:
+        css += '\n/* compact public cards */\n.live-car-card .car-specs{display:none!important}.live-car-card .car-summary-link{position:relative;z-index:1}.live-car-card .catalog-card-actions{position:relative;z-index:2}.live-car-card .catalog-card-actions a{touch-action:manipulation;pointer-events:auto}.arrow-link::before,.arrow-link::after{content:none!important;display:none!important}\n'
+        stylesheet.write_text(css, encoding='utf-8')
     if '/* precise contact anchors */' not in css:
         css += '\n/* precise contact anchors */\n#form,#contacts{scroll-margin-top:100px} .request-form{min-width:0}\n'
         stylesheet.write_text(css, encoding="utf-8")
