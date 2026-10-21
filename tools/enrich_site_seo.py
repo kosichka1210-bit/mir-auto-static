@@ -6,6 +6,7 @@ from __future__ import annotations
 import html
 import json
 import re
+import shutil
 import sys
 import xml.etree.ElementTree as ET
 from pathlib import Path
@@ -187,7 +188,7 @@ def enrich(page: Path, root: Path) -> None:
     text = replace_meta(text, "name", "twitter:card", "summary_large_image")
     text = enrich_images(text)
     text = re.sub(r'live-catalog\.js\?v=[^"\s]+', 'live-catalog.js?v=compact-cards-11', text)
-    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=polished-facts-8', text)
+    text = re.sub(r'style\.css\?v=[^"\s]+', 'style.css?v=unbounded-compact-12', text)
     if kind != 'home':
         text = re.sub(r'href="(?:\.\./|/)?#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
         text = re.sub(r'href="(?:\.\./)*index\.html#form"(>\s*Контакты\s*</a>)', r'href="/#contacts"\1', text)
@@ -322,6 +323,24 @@ def make_live_vehicle_urls_clean(root: Path) -> None:
 ''', encoding="utf-8")
 
 
+def apply_heading_font(root: Path) -> None:
+    """Self-host the approved heading font; retain Manrope for body and controls."""
+    fonts = root / 'fonts'
+    fonts.mkdir(exist_ok=True)
+    shutil.copyfile(Path(__file__).resolve().parent / 'assets/Unbounded.ttf', fonts / 'unbounded-v1.ttf')
+    stylesheet = root / 'style.css'
+    css = stylesheet.read_text(encoding='utf-8')
+    if '/* approved Unbounded headings */' not in css:
+        css += '''
+/* approved Unbounded headings */
+@font-face{font-family:Unbounded;src:url('/fonts/unbounded-v1.ttf') format('truetype');font-style:normal;font-weight:200 900;font-display:swap}
+h1,h2,h3,h4,h5,h6,.live-car-card h3{font-family:Unbounded,Manrope,Arial,sans-serif;font-weight:600;letter-spacing:-.025em;overflow-wrap:anywhere}
+.live-car-card h3{font-size:23px;line-height:1.35;min-height:2.7em}
+@media(max-width:600px){.live-car-card h3{font-size:21px}}
+'''
+        stylesheet.write_text(css, encoding='utf-8')
+
+
 def main() -> int:
     if len(sys.argv) != 2:
         print("Usage: enrich_site_seo.py <unpacked-site-root>", file=sys.stderr)
@@ -334,6 +353,7 @@ def main() -> int:
         enrich(page, root)
     update_sitemap(root)
     make_live_vehicle_urls_clean(root)
+    apply_heading_font(root)
     verification = Path(__file__).resolve().parent / "googlefa09f061eac4b9cb.html"
     if verification.is_file():
         (root / verification.name).write_bytes(verification.read_bytes())

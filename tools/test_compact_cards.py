@@ -20,11 +20,15 @@ with tempfile.TemporaryDirectory(prefix='mir-auto-card-test-') as directory:
     assert 'live-catalog.js?v=compact-cards-11' in home
     assert 'href="${detailsUrl}"' in source and 'Обсудить автомобиль' in source
     assert 'touch-action:manipulation' in css and 'display:none!important' in css
-    assert 'Manrope,Arial,sans-serif' in css  # font choice is not deployed yet
+    assert 'Manrope,Arial,sans-serif' in css  # body text retains its existing font
+    assert 'font-family:Unbounded,Manrope,Arial,sans-serif' in css
+    assert "font-display:swap" in css
+    assert (root/'fonts/unbounded-v1.ttf').stat().st_size > 10000
+    assert 'style.css?v=unbounded-compact-12' in home
     php=(repo/'telegram-bot/public/api/catalogue.php').read_text(encoding='utf-8')
     assert 'car-specs' not in php and '$factsHtml' not in php
     assert '<h3>' in php and 'Обсудить автомобиль' in php
     node=shutil.which('node')
     if not node: raise RuntimeError('Node is required to verify the generated catalogue script')
     subprocess.run([node,'--check',str(root/'live-catalog.js')],check=True)
-    print('Compact cards passed: no fact summaries/decorative arrows, links preserved, current font unchanged; JS syntax valid.')
+    print('Compact cards passed: no summaries/arrows; links preserved; self-hosted Unbounded headings, body unchanged; JS valid.')
