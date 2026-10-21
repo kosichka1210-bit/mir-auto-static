@@ -330,6 +330,8 @@ def main() -> int:
     verification = Path(__file__).resolve().parent / "googlefa09f061eac4b9cb.html"
     if verification.is_file():
         (root / verification.name).write_bytes(verification.read_bytes())
+    for verification in Path(__file__).resolve().parent.glob('yandex_*.html'):
+        (root / verification.name).write_bytes(verification.read_bytes())
     robots = root / "robots.txt"
     if not robots.exists() or f"Sitemap: {SITE}/sitemap.xml" not in robots.read_text(encoding="utf-8"):
         print("robots.txt must reference the canonical sitemap URL.", file=sys.stderr)
